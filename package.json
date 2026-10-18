@@ -9,7 +9,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:contracts": "vitest run packages/contracts packages/teaching-runtime"
+    "test:contracts": "vitest run packages/contracts packages/teaching-runtime",
+    "explorer": "tsx apps/local-server/src/main.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

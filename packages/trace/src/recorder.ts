@@ -25,7 +25,8 @@ export interface RecorderOptions {
   now: () => number
   maxRecords?: number
   maxPayloadBytes?: number
-  onRecord?: (record: TraceRecord) => void
+  /** Called synchronously for each record, with the store holding its payloads. */
+  onRecord?: (record: TraceRecord, payloads: PayloadStore) => void
 }
 
 /**
@@ -84,7 +85,7 @@ export class Recorder {
     if (payloadRef) record.payloadRef = payloadRef
     Object.freeze(record)
     this.records.push(record)
-    this.options.onRecord?.(record)
+    this.options.onRecord?.(record, this.payloads)
     return record
   }
 }
