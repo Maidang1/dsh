@@ -79,7 +79,7 @@ const lesson: AuthoredLesson = {
       expectedObservations: ['插件进入 active'],
       expectedCheckpoints: [],
       upstreamRefIds: [],
-      simplifications: [],
+      simplifications: ['TODO: 与上游相比删减或替换了什么。'],
     },
   ],
 }

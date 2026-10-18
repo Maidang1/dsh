@@ -43,6 +43,6 @@ pnpm lessons:build && pnpm lessons:verify
 - [ ] `requires` 与源码一致，`contractIds`、`scenarioIds`、`architectureNodeIds`、`upstreamRefIds` 都能解析。
 - [ ] 锚点成对闭合且非空，`focusAnchors` 指向本阶段真正变化的代码。
 - [ ] `expectedObservations` 能在该阶段的轨迹中逐条找到。
-- [ ] `simplifications` 写明与上游的差异，没有“模型必然更聪明”一类不可验证的描述。
+- [ ] 每个阶段的 `simplifications` 至少一条（构建检查），写明与上游的差异，没有“模型必然更聪明”一类不可验证的描述。
 - [ ] 上游引用通过 `lessons:verify-upstream`，`supportLevel` 与实际验证等级一致。
 - [ ] 内容质量符合 [03 §10](03-code-hike-and-plugin-lessons.md#10-内容质量准则)。

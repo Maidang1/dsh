@@ -114,6 +114,8 @@ describe('lesson validation', () => {
     ['an unknown focus anchor', (text: string) => text.replace("focusAnchors: ['inject']", "focusAnchors: ['nope']"), /focus anchor "nope" does not exist/],
     ['an unknown contract', (text: string) => text.replace("contractIds: ['PROMPT-04', 'LIFE-01']", "contractIds: ['PROMPT-99']"), /unknown contract "PROMPT-99"/],
     ['an executable stage without scenarios', (text: string) => text.replace("contractIds: ['CTX-02'],\n      scenarioIds: ['prompt-section-lifecycle']", "contractIds: ['CTX-02'],\n      scenarioIds: []"), /executable stages need scenarios and contracts/],
+    ['a stage without simplifications (docs/05 §7)', (text: string) => text.replace(/simplifications: \['Cordis 的 inject[^\]]*\]/, 'simplifications: []'), /01-dependency: list at least one simplification/],
+    ['a checkpoint outside the plugin namespace', (text: string) => text.replace("expectedObservations: ['依赖已解析", "expectedCheckpoints: ['agent-loop:request-prepared'],\n      expectedObservations: ['依赖已解析"), /checkpoint "agent-loop:request-prepared" is outside the "prompt-contributor:" namespace/],
     ['a code stage that does not exist', (text: string) => text.replace("codeStageId: 'prompt-contributor@00-entry'", "codeStageId: 'prompt-contributor@99'"), /is not an executable stage/],
   ])('fails on %s', async (_name, edit, message) => {
     await expect(buildWith(edit)).rejects.toThrow(message)

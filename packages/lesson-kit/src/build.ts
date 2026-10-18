@@ -163,6 +163,11 @@ async function buildLesson(dir: string, options: BuildOptions, stages: ReadonlyM
     if (stage.kind === 'executable') {
       check(stage.scenarioIds.length > 0 && stage.contractIds.length > 0, `${at}: executable stages need scenarios and contracts`)
     }
+    // docs/05 §7: every stage says what it leaves out, and teaching checkpoints keep their plugin's namespace.
+    check(stage.simplifications.length > 0, `${at}: list at least one simplification against upstream`)
+    for (const name of stage.expectedCheckpoints ?? []) {
+      check(name.startsWith(`${lesson.pluginDefinitionId}:`), `${at}: checkpoint "${name}" is outside the "${lesson.pluginDefinitionId}:" namespace`)
+    }
     return { ...stage, sourceFiles: code.files.map(file => file.path), sourceHash: code.definition.sourceHash }
   })
 

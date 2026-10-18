@@ -35,7 +35,7 @@ const lesson: AuthoredLesson = {
       scenarioIds: ['prompt-section-lifecycle'],
       expectedObservations: ['依赖已解析，插件进入 active', '请求仍与基线相同'],
       upstreamRefIds: [],
-      simplifications: [],
+      simplifications: ['Cordis 的 inject 也接受“服务名 → 配置”的对象形式；教学阶段只用数组形式，构建会拒绝对象形式。'],
     },
     {
       id: '02-section',

@@ -37,7 +37,7 @@ const lesson: AuthoredLesson = {
       expectedCheckpoints: ['tool-guard:audit-enter', 'tool-guard:policy-enter', 'tool-guard:policy-return', 'tool-guard:audit-return'],
       expectedObservations: ['检查点依次为 audit-enter、policy-enter、policy-return、audit-return', '两层都委托，工具照常执行'],
       upstreamRefIds: ['upstream:cordis-waterfall'],
-      simplifications: [],
+      simplifications: ['两层都用默认的追加注册，嵌套顺序只由注册先后决定；Cordis 的 ctx.on 还支持 prepend，把监听器放到最外层，教学阶段不使用。'],
     },
     {
       id: '02-deny',
