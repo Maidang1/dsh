@@ -78,6 +78,16 @@ describe('static file containment', () => {
       expect([403, 404]).toContain(escaped.status)
       expect(login.headers['referrer-policy']).toBe('no-referrer')
       expect((await get('/%E0%A4%A', cookie)).status).toBe(400)
+
+      // A static-export page next to its same-named data directory, as Next writes it.
+      await mkdir(join(staticDir, 'plugin', 'lesson'), { recursive: true })
+      await writeFile(join(staticDir, 'plugin', 'lesson.html'), 'lesson page')
+      await writeFile(join(staticDir, 'plugin', 'lesson', '__next.txt'), 'segment data')
+      for (const path of ['/plugin/lesson', '/plugin/lesson/', '/plugin/lesson?instance=x']) {
+        const page = await get(path, cookie)
+        expect([path, page.status, page.body]).toEqual([path, 200, 'lesson page'])
+      }
+      expect((await get('/plugin/lesson/__next.txt', cookie)).body).toBe('segment data')
       expect((await get('/api/runs/%E0%A4%A', cookie)).status).toBe(400)
       expect(escaped.headers['x-content-type-options']).toBe('nosniff')
     } finally {

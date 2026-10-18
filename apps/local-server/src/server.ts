@@ -15,7 +15,7 @@ import { ControlError } from './controller.ts'
 import type { ControllerEvent, RunController } from './controller.ts'
 import { captureEnvironment } from './environment.ts'
 import { commitDraft } from './experiments.ts'
-import { ConflictError, Draft, InvalidBundleError, NotFoundError } from './store.ts'
+import { ConflictError, Draft, InvalidBundleError, LessonProgressUpdate, NotFoundError } from './store.ts'
 import type { RetentionPolicy } from './store.ts'
 import type { RunStore } from './store.ts'
 
@@ -256,6 +256,12 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
         const records = await store.readTrace(parts[1]!, Number.isInteger(fromSeq) && fromSeq > 0 ? fromSeq : 0)
         return sendJson(response, 200, { records, payloads: await storedPayloads(records) })
       }
+      case 'GET /progress':
+        return sendJson(response, 200, await store.getLearningProgress())
+      case 'PUT /lessons/:id/progress': {
+        if (!catalog.lessons?.lessons.some(lesson => lesson.id === parts[1])) throw new HttpError(404, `unknown lesson ${parts[1]}`)
+        return sendJson(response, 200, await store.updateLessonProgress(parts[1]!, LessonProgressUpdate.parse(await readBody(request))))
+      }
       case 'GET /storage':
         return sendJson(response, 200, { ...await store.usage(), retention: options.retention ?? null })
       case 'DELETE /runs/:id': {
@@ -304,12 +310,15 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
       throw new HttpError(400, 'malformed path')
     }
     const requested = normalize(decoded).replace(/^([/\\])+/, '')
-    let path = join(dir, requested)
-    const inside = relative(dir, path)
+    const base = join(dir, requested)
+    const inside = relative(dir, base)
     if (inside.startsWith('..') || isAbsolute(inside)) throw new HttpError(403, 'path escapes the static root')
-    if (existsSync(path) && statSync(path).isDirectory()) path = join(path, 'index.html')
-    if (!existsSync(path) && existsSync(`${path}.html`)) path = `${path}.html`
-    if (!existsSync(path)) throw new HttpError(404, 'not found')
+    // Next's static export writes /plugin/x.html next to a /plugin/x/ data directory,
+    // so a page must win over a same-named directory, with or without a trailing slash.
+    const trimmed = base.replace(/[/\\]+$/, '')
+    const isFile = (candidate: string) => existsSync(candidate) && statSync(candidate).isFile()
+    const path = [base, `${trimmed}.html`, join(base, 'index.html')].find(isFile)
+    if (!path) throw new HttpError(404, 'not found')
     response.writeHead(200, { 'content-type': MIME[extname(path)] ?? 'application/octet-stream' })
     response.end(readFileSync(path))
   }
