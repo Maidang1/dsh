@@ -41,6 +41,7 @@ pnpm explorer     # 启动本地服务，终端打印带一次性令牌的链接
 |---|---|
 | `pnpm typecheck` | 全部包与界面的 TypeScript 检查 |
 | `pnpm test` | 契约、轨迹、运行宿主与内容构建测试（Vitest） |
+| `pnpm lesson:new <plugin-id>` | 生成新课程骨架（阶段源码、课程内容、组合与场景），制作流程见 [课程制作指南](docs/authoring.md) |
 | `pnpm lessons:build` | 构建课程，展示代码与执行模块共用同一 sourceHash |
 | `pnpm lessons:verify` | 在打包后的模块上运行每个可执行课程阶段 |
 | `pnpm lessons:verify-upstream` | 对固定 commit 核对上游源码引用（会克隆上游到 `.cache/`，或使用 `UPSTREAM_DIR`） |

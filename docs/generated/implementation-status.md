@@ -2,7 +2,7 @@
 
 按 `04-implementation-plan.md` §11 记录每个任务的完成情况：交付位置、验收依据（测试与契约）、未支持的边界。上游版本均为 `687f282e8625c6b8d11ff58211a90524be2e4317`。更新于 2026-10-18，对应提交 `e4f8f7f` 之后。
 
-验证命令：`pnpm typecheck`、`pnpm test`（133 个用例）、`pnpm lessons:build`、`pnpm lessons:verify`、`pnpm lessons:verify-upstream`、`pnpm build:ui`、`pnpm test:e2e`（16 个用例）。
+验证命令：`pnpm typecheck`、`pnpm test`（135 个用例）、`pnpm lessons:build`、`pnpm lessons:verify`、`pnpm lessons:verify-upstream`、`pnpm build:ui`、`pnpm test:e2e`（16 个用例）。
 
 ## P0 依据与技术验证
 
@@ -42,7 +42,7 @@
 | P3-03 时间线与回放 | 完成 | 虚拟化列表、键盘操作、状态变化历史、1×/2×/4× 回放播放与暂停 | `workbench.spec.ts` | — |
 | P3-04 前后对比 | 完成 | 请求差异与对照条件 | `workbench.spec.ts` | — |
 | P4-01..03 提示词插件闭环 | 完成 | `content/plugins/prompt-contributor` | `lesson.spec.ts`、`lessons:verify` | — |
-| P4-04 作者模板 | 部分 | 第二门课程按同一结构新增，无需改运行器或界面 | `tool-guard` 课程 | 尚无独立的模板目录或脚手架命令 |
+| P4-04 作者模板 | 完成 | `pnpm lesson:new` 脚手架、`docs/authoring.md` 制作指南；第二门课程按同一结构新增，无需改运行器或界面 | `scaffold.spec.ts`、`tool-guard` 课程 | — |
 
 ## P5–P7
 
