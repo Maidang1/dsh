@@ -165,6 +165,8 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 .architecture li { margin: 6px 0; }
 .architecture li.is-later { opacity: .5; border-left: 2px dashed var(--border); padding-left: 6px; list-style: none; margin-left: -18px; }
 .architecture li.is-highlighted strong { color: var(--accent); }
+.architecture li.is-external { border: 3px double var(--muted); border-radius: 6px; padding: 4px 6px; list-style: none; margin-left: -18px; }
+.link-button { padding: 0; border: 0; background: none; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; font-size: 12px; }
 .stage-state__requests pre { margin: 2px 0 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; white-space: pre-wrap; font-size: 12px; }
 .stage-nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
 .stage-nav ol { display: flex; flex-wrap: wrap; gap: 4px; list-style: none; margin: 0; padding: 0; }

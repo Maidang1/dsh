@@ -64,3 +64,16 @@ test('shows upstream excerpts pinned to the baseline commit', async () => {
   const link = page.getByRole('link', { name: 'SystemPrompt.section' })
   await expect(link).toHaveAttribute('href', /687f282e8625c6b8d11ff58211a90524be2e4317\/packages\/core\/system-prompt\/src\/index\.ts#L478-L487/)
 })
+
+test('locates a module\'s code from the architecture and marks later relations', async () => {
+  await page.getByRole('button', { name: '02-section' }).click()
+  await page.getByRole('tab', { name: '内部架构' }).click()
+  const architecture = page.locator('.architecture')
+  await expect(architecture).toContainText('入口')
+  await architecture.getByRole('button', { name: /^定位代码：section/ }).click()
+  await expect(page.getByText(/^已定位到 .*prompt-contributor\/stages\/02-section\/index\.ts 第 \d+–\d+ 行（section）$/)).toBeAttached()
+
+  await page.getByRole('button', { name: '00-entry' }).click()
+  await expect(architecture.getByRole('button', { name: /^定位代码：section/ })).toHaveCount(0)
+  await expect(architecture.locator('li.is-later', { hasText: '片段注册表' }).first()).toContainText('后续阶段引入')
+})

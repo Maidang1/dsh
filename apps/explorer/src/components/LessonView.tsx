@@ -7,8 +7,8 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { BuiltLesson } from '@harness-explorer/lesson-kit/schema'
-import type { ModelRequestPayload } from '@harness-explorer/contracts'
+import type { ArchitectureNode, BuiltLesson } from '@harness-explorer/lesson-kit/schema'
+import type { ModelRequestPayload, SourceRef } from '@harness-explorer/contracts'
 import type { LessonStageView } from '@/lib/lesson-data'
 import { useReplay } from '@/lib/replay'
 import { useExplorer } from '@/lib/store'
@@ -18,6 +18,17 @@ import { outcomeText } from './Panels'
 import { NarrowTabs, narrowPane } from './NarrowTabs'
 
 type SideTab = 'architecture' | 'state' | 'upstream'
+
+const NODE_KIND: Record<ArchitectureNode['kind'], string> = {
+  'entry': '入口',
+  'type': '类型',
+  'function': '函数',
+  'class': '类',
+  'registry': '注册表',
+  'event': '事件',
+  'resource': '资源',
+  'external-service': '外部服务',
+}
 
 interface Props {
   lesson: Omit<BuiltLesson, 'mdx'>
@@ -34,6 +45,7 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
   const [fileKey, setFileKey] = useState('entry')
   const [pane, setPane] = useState<'code' | 'side'>('code')
   const [tab, setTab] = useState<SideTab>('architecture')
+  const [located, setLocated] = useState<SourceRef | null>(null)
   useEffect(() => { void useExplorer.getState().init() }, [])
 
   // Restore the reading position once progress is loaded, then save every move.
@@ -83,6 +95,26 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
   }, [settledOk, stage.id, stage.kind, selected, lesson.id, completedStages])
 
   const introduced = useMemo(() => new Set(lesson.stages.slice(0, index + 1).map(item => item.id)), [lesson.stages, index])
+  const isIntroduced = (nodeId: string) => {
+    const node = lesson.architecture.nodes.find(item => item.id === nodeId)
+    return !node?.introducedAtStageId || introduced.has(node.introducedAtStageId)
+  }
+  // A node cites anchors as "<stage>#<anchor>"; locate the same anchor in the files this stage shows.
+  const locateNode = (sourceRefIds: readonly string[]) => sourceRefIds
+    .map(id => id.split('#')[1])
+    .map(anchor => view.sourceRefs.find(ref => anchor && ref.symbol === anchor && view.files.some(item => item.path === ref.path)))
+    .find(Boolean)
+  const locate = (ref: SourceRef) => {
+    setFileKey(view.files.find(item => item.path === ref.path)!.key)
+    setPane('code')
+    setLocated(ref)
+  }
+  useEffect(() => {
+    if (!located) return
+    // Code Hike renders one child per source line under the <pre>'s wrapper.
+    const line = document.querySelector(`.lesson-code > div > :nth-child(${located.startLine})`)
+    line?.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+  }, [located])
   const upstream = lesson.upstreamRefs.filter(ref => stage.upstreamRefIds.includes(ref.id))
   const requests = runMatches && selected
     ? selected.records
@@ -137,6 +169,7 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
             <span className="muted"> · 相对上一阶段：新增 {file.added} 行，删除 {file.removed} 行 · sourceHash {stage.sourceHash.slice(7, 19)}</span>
           </p>
           <LessonCode key={file.key} code={file.code} />
+          <p className="sr-only" aria-live="polite">{located ? `已定位到 ${located.path} 第 ${located.startLine}–${located.endLine} 行（${located.symbol}）` : ''}</p>
         </section>
 
         <aside className={`lesson__side${narrowPane(pane === 'side')}`}>
@@ -152,13 +185,20 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
             <div className="architecture">
               <ul>
                 {lesson.architecture.nodes.map((node) => {
-                  const visible = !node.introducedAtStageId || introduced.has(node.introducedAtStageId)
+                  const visible = isIntroduced(node.id)
                   const highlighted = stage.architectureNodeIds.includes(node.id)
+                  const target = visible ? locateNode(node.sourceRefIds) : undefined
+                  const external = node.kind === 'external-service'
                   return (
-                    <li key={node.id} className={`${visible ? '' : 'is-later'} ${highlighted ? 'is-highlighted' : ''}`}>
-                      <strong>{node.label}</strong> <span className="badge">{node.kind}</span>
+                    <li key={node.id} className={`${visible ? '' : 'is-later'} ${highlighted ? 'is-highlighted' : ''} ${external ? 'is-external' : ''}`}>
+                      <strong>{node.label}</strong> <span className="badge">{NODE_KIND[node.kind]}</span>
                       {!visible ? <span className="muted">（后续阶段引入）</span> : null}
                       <div className="muted">{node.responsibility}</div>
+                      {target ? (
+                        <button type="button" className="link-button" onClick={() => locate(target)}>
+                          定位代码：{target.symbol}（第 {target.startLine}–{target.endLine} 行）
+                        </button>
+                      ) : null}
                     </li>
                   )
                 })}
@@ -168,10 +208,11 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
                 {lesson.architecture.edges.map((edge) => {
                   const from = lesson.architecture.nodes.find(node => node.id === edge.from)?.label
                   const to = lesson.architecture.nodes.find(node => node.id === edge.to)?.label
+                  const later = !isIntroduced(edge.from) || !isIntroduced(edge.to)
                   return (
-                    <li key={edge.id}>
+                    <li key={edge.id} className={later ? 'is-later' : ''}>
                       {from} <em>{{ calls: '调用', implements: '实现', registers: '注册', reads: '读取', subscribes: '订阅', disposes: '清理', requires: '依赖' }[edge.relation]}</em> {to}
-                      <span className="muted"> · 依据：{{ source: '源码', observed: '运行观测', explanation: '解释' }[edge.evidence]}</span>
+                      <span className="muted"> · 依据：{{ source: '源码', observed: '运行观测', explanation: '解释' }[edge.evidence]}{later ? '（后续阶段引入）' : ''}</span>
                     </li>
                   )
                 })}
