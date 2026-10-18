@@ -68,6 +68,10 @@ describe('run export and import', () => {
       copy.payloads[ref] = { forged: true }
     }, /does not match its content hash/],
     ['a tampered revision', (copy: RunBundle) => { copy.revision.seed = 99 }, /does not match its revisionHash/],
+    ['a revision under another id', (copy: RunBundle) => {
+      copy.revision.id = 'rev-0000000000000000'
+      copy.manifest.experimentRevisionId = copy.revision.id
+    }, /is not the id of its revisionHash/],
     ['a gap in the records', (copy: RunBundle) => { copy.records.splice(3, 1) }, /not contiguous at seq 3/],
     ['records of another run', (copy: RunBundle) => { copy.records[0] = { ...copy.records[0]!, runId: 'run-other' } }, /belongs to run run-other/],
     ['a missing payload', (copy: RunBundle) => { delete copy.payloads[copy.records.find(record => record.payloadRef)!.payloadRef!] }, /is missing/],

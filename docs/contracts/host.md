@@ -17,7 +17,7 @@
 
 ### EXPORT-01 运行导出与导入
 
-- 期望：导出包含 manifest、revision、场景、脱敏环境、轨迹与 payload；导入到另一仓库后可回放；篡改的 payload、revision、序号缺口、外来记录和缺失 payload 被拒绝；未结算运行导入为 interrupted；不覆盖已有运行；导入不执行代码。
+- 期望：导出包含 manifest、revision、场景、脱敏环境、轨迹与 payload；导入到另一仓库后可回放；篡改的 payload、revision、不由内容哈希导出的 revision id、序号缺口、外来记录和缺失 payload 被拒绝；未结算运行导入为 interrupted；不覆盖已有运行；导入不执行代码。
 - 验证：`apps/local-server/tests/export.spec.ts`、`apps/explorer/e2e/workbench.spec.ts`。状态：verified。
 
 ### STORE-01 容量管理

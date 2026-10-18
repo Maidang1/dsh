@@ -78,6 +78,9 @@ export class NotFoundError extends Error {
   override name = 'NotFoundError'
 }
 
+/** Revision ids are derived from the content hash, so equal content shares one id. */
+const revisionIdOf = (revisionHash: string) => `rev-${revisionHash.slice('sha256:'.length, 'sha256:'.length + 16)}`
+
 const safeName = (value: string) => {
   if (!/^[\w.:-]+$/.test(value)) throw new Error(`unsafe store key "${value}"`)
   return value.replaceAll(':', '-')
@@ -129,7 +132,7 @@ export class RunStore {
   /** Revisions are content-addressed and never rewritten. */
   async putRevision(revision: Omit<ExperimentRevision, 'id' | 'revisionHash'>): Promise<ExperimentRevision> {
     const revisionHash = hashJson(revision as JsonValue)
-    const id = `rev-${revisionHash.slice('sha256:'.length, 'sha256:'.length + 16)}`
+    const id = revisionIdOf(revisionHash)
     const full = ExperimentRevision.parse({ ...revision, id, revisionHash })
     const path = this.path('revisions', `${id}.json`)
     if (!existsSync(path)) await this.writeJson(path, full)
@@ -279,6 +282,8 @@ export class RunStore {
     const { manifest, revision, records } = bundle
     const { id: _id, revisionHash, ...content } = revision
     if (hashJson(content as JsonValue) !== revisionHash) throw new InvalidBundleError('revision does not match its revisionHash')
+    // Revisions are stored by id and never rewritten, so a reused id would bind the run to other content.
+    if (revision.id !== revisionIdOf(revisionHash)) throw new InvalidBundleError(`revision id ${revision.id} is not the id of its revisionHash`)
     if (manifest.revisionHash !== revisionHash || manifest.experimentRevisionId !== revision.id) {
       throw new InvalidBundleError('manifest is bound to a different revision')
     }
