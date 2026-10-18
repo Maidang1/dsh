@@ -76,7 +76,7 @@ waterfall 是 around-middleware，监听器通过 next 委托，可以不调用 
 | 上游复用插件的观测适配 | 需在不改源码、不改语义的前提下记录生命周期、服务解析、事件分发与 Session 事件 | P0-04 | 观测基于 Cordis 内部事件，OBS-01 已验证 |
 | 前端托管方式 | Next.js 静态导出能否由 Node 同源托管并满足 Code Hike/MDX；否则改用 custom server | P0-03 | 静态导出 + local-server 同源托管 |
 | 真实模型提供方与凭据变量 | 依据上游 llm 插件实际支持的提供方确定 | P0-01、P2-06 | DeepSeek Messages 接口，DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL（REAL-01，仅对模拟服务验证） |
-| Fiber 完整转换表 | inventory phase 不能推出完整转换关系 | P0-02 | 未完成：已验证 PENDING→LOADING→ACTIVE、依赖丢失回到 PENDING、卸载到 DISPOSED |
+| Fiber 完整转换表 | inventory phase 不能推出完整转换关系 | P0-02 | 已完成（FIBER-01）；`update()` 与 Loader 配置重载未覆盖 |
 | 依赖丢失/恢复和清理顺序 | 错误简化会影响所有插件教学 | P0-02、P2 | CTX-01/02、LIFE-01/02 已验证 |
 | Code Hike 与本地 Node 应用组合 | MDX、客户端交互、执行模块和轨迹订阅需一起验证 | P0-03 | 已实现，端到端测试覆盖 |
 | Agent 请求取消及重试细节 | 概览不足以支持全部分支 | P0-02、P2-04 | 取消已覆盖（TURN-02）；重试未实现 |

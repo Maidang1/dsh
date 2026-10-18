@@ -315,7 +315,7 @@ RUN 必须绑定已经校验的不可变 revision。运行中编辑只修改草�
 
 ### 6.2 插件生命周期
 
-从上游公开 inventory 已确认的 phase 是 pending、loading、active、failed、unloading、null。该接口是快照，不足以反推出完整合法转换表；阶段 0 必须阅读 Cordis 的 Fiber/Loader 实现和测试，补齐转换契约。
+从上游公开 inventory 已确认的 phase 是 pending、loading、active、failed、unloading、null。该接口是快照，不足以反推出完整合法转换表；完整转换表已从 Cordis 的 Fiber 实现整理为契约 FIBER-01（`docs/contracts/cordis.md`），并由探针测试验证。注意 apply 抛错的路径是 LOADING → UNLOADING → FAILED，而不是直接进入 FAILED。
 
 教学运行时可以有额外诊断字段 dependencyStatus、reason、lastError，但不能把这些解释字段冒充上游 phase。特别是 null 仅表示无活动 root Fiber，不等于“卸载成功”或“从未启动”。
 

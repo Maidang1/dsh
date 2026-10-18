@@ -45,3 +45,23 @@
 
 - 期望：监听器抛出的异常沿 waterfall 向外传播，不被吞掉，后续工具体不执行。
 - 验证：`packages/teaching-runtime/tests/tool-contract.spec.ts`「propagates a throwing pre-execute listener」。状态：verified。
+
+### FIBER-01 生命周期转换表
+
+- 上游：`vendor/cordis/src/fiber.ts` 的 `_setEpoch`、`_reload`、`_unload`、`_getState`。状态由“注入是否全部解析”（epoch）与 `_error`、`uid` 共同决定；`internal/status` 报告每次变化。
+- 期望（括号内为插件树显示的 phase）：
+
+| 从 | 到 | 条件 |
+|---|---|---|
+| PENDING | LOADING | 所有 inject 的服务可用 |
+| LOADING | ACTIVE | apply 完成且期间依赖未变 |
+| LOADING | UNLOADING → FAILED | apply 抛错：先清理已收集的 effect，再停在 FAILED |
+| LOADING | UNLOADING → PENDING | apply 进行中依赖丢失 |
+| ACTIVE | UNLOADING → PENDING | 依赖丢失 |
+| ACTIVE | UNLOADING → LOADING → ACTIVE | 提供者被替换 |
+| FAILED | LOADING → ACTIVE | 依赖重新解析后重试成功 |
+| PENDING | UNLOADING → DISPOSED（null） | 未激活即卸载，apply 从未运行 |
+| ACTIVE | UNLOADING → DISPOSED（null） | 卸载；清理失败时仍到 DISPOSED，见 LIFE-02 |
+
+- 未覆盖：`update()` 的配置更新路径与 Loader/Include 的配置重载（教学运行时不使用 Loader）。
+- 验证：`packages/teaching-runtime/tests/fiber-transitions.spec.ts`。状态：verified。
