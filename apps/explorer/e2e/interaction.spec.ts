@@ -61,3 +61,26 @@ test('adding a plugin keeps the viewport', async ({ page }) => {
   await page.getByRole('button', { name: '从组合中移除' }).click()
   await expect(added).toHaveCount(0)
 })
+
+test('adds a plugin together with the providers of its missing services', async ({ page }) => {
+  const original = await page.request.get('/api/drafts/main').then(response => response.json()) as { version: number }
+  await page.goto('/')
+  const node = (name: string) => page.locator(`.react-flow__node[data-id="${name}"]`)
+  await node('tools').click()
+  await page.getByRole('button', { name: '从组合中移除' }).click()
+  await expect(node('tools')).toHaveCount(0)
+
+  await page.getByRole('button', { name: '添加插件' }).click()
+  const entry = page.locator('.library__list li').filter({ hasText: 'calculator' })
+  await expect(entry).toContainText('根作用域缺少：tools')
+  await expect(entry).toContainText('可同时添加：tools（提供 tools）')
+  await entry.getByRole('button', { name: '同时添加依赖（共 2 个实例）' }).click()
+  await expect(node('tools')).toBeVisible()
+  await expect(node('calculator')).toBeVisible()
+
+  // Restore the draft the other specs expect.
+  const { version: _version, ...draft } = original
+  const { version } = await page.request.get('/api/drafts/main').then(response => response.json()) as typeof original
+  const response = await page.request.put('/api/drafts/main', { data: { expectedVersion: version, draft }, headers: { origin: new URL(page.url()).origin } })
+  expect(response.ok()).toBe(true)
+})

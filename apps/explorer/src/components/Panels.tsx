@@ -8,6 +8,7 @@ import type { Draft, LessonsResponse, PublicCatalog, PublicStage } from '@/lib/a
 import type { RunData } from '@/lib/store'
 import { PHASE_LABEL, phaseOf } from './PluginTree'
 import type { PhaseChange } from '@/lib/replay'
+import { latestStages, planAddition } from '@/lib/library'
 
 const PHASE_TEXT: Record<RuntimeState['phase'], string> = {
   idle: '空闲',
@@ -161,31 +162,37 @@ export function Inspector({ instance, stage, snapshot, lessons, editable, stages
 interface LibraryProps {
   stages: readonly PublicStage[]
   draft: Draft
-  onAdd(stage: PublicStage): void
+  /** Stages to add to the root scope, dependencies first. */
+  onAdd(stages: PublicStage[]): void
 }
 
 export function PluginLibrary({ stages, draft, onAdd }: LibraryProps) {
   const [open, setOpen] = useState(false)
-  const definitions = useMemo(() => {
-    const byDefinition = new Map<string, PublicStage[]>()
-    for (const stage of stages) byDefinition.set(stage.pluginDefinitionId, [...byDefinition.get(stage.pluginDefinitionId) ?? [], stage])
-    return [...byDefinition]
-  }, [stages])
-  const providers = new Set(draft.composition.instances.flatMap(instance => stages.find(stage => stage.id === instance.stageId)?.provides ?? []))
+  const definitions = useMemo(() => latestStages(stages), [stages])
+  const add = (selected: PublicStage[]) => { onAdd(selected); setOpen(false) }
   return (
     <div className="library">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}>添加插件</button>
       {open ? (
         <ul className="library__list">
-          {definitions.map(([definitionId, versions]) => {
-            const latest = versions.at(-1)!
-            const missing = latest.requires.filter(service => !providers.has(service))
+          {definitions.map(latest => {
+            const plan = planAddition(stages, draft.composition.instances, latest)
+            const missing = [...plan.providers.map(item => item.service), ...plan.unresolved]
             return (
-              <li key={definitionId}>
-                <strong>{definitionId}</strong> <span className="muted">{latest.id}</span>
+              <li key={latest.pluginDefinitionId}>
+                <strong>{latest.pluginDefinitionId}</strong> <span className="muted">{latest.id}</span>
                 <div className="muted">需要：{latest.requires.join('、') || '无'} · 提供：{latest.provides.join('、') || '无'}</div>
-                {missing.length ? <div className="warning-text">当前草稿缺少：{missing.join('、')}（添加后实例会停在等待状态）</div> : null}
-                <button type="button" onClick={() => { onAdd(latest); setOpen(false) }}>添加到根作用域</button>
+                {missing.length ? (
+                  <div className="warning-text">
+                    根作用域缺少：{missing.join('、')}（只添加此插件时，实例会停在等待状态）
+                    {plan.providers.length ? <div>可同时添加：{plan.providers.map(item => `${item.stage.pluginDefinitionId}（提供 ${item.service}）`).join('、')}</div> : null}
+                    {plan.unresolved.length ? <div>插件库中没有提供 {plan.unresolved.join('、')} 的插件</div> : null}
+                  </div>
+                ) : null}
+                <button type="button" onClick={() => add([latest])}>{missing.length ? '只添加此插件' : '添加到根作用域'}</button>
+                {plan.providers.length ? (
+                  <button type="button" onClick={() => add(plan.stages)}>同时添加依赖（共 {plan.stages.length} 个实例）</button>
+                ) : null}
               </li>
             )
           })}

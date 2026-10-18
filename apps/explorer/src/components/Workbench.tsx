@@ -6,6 +6,7 @@ import { phaseHistory, useReplay } from '@/lib/replay'
 import { PluginList, PluginTree } from './PluginTree'
 import { Inspector, PluginLibrary, RunBar, Timeline, outcomeText } from './Panels'
 import { RequestDiff } from './RequestDiff'
+import { instancesFor } from '@/lib/library'
 
 type BottomTab = 'timeline' | 'diff'
 
@@ -135,15 +136,7 @@ export function Workbench() {
         <PluginLibrary
           stages={catalog.stages}
           draft={draft}
-          onAdd={item => void updateInstances(instances => [...instances, {
-            id: instances.some(existing => existing.id === item.pluginDefinitionId) ? `${item.pluginDefinitionId}-${instances.length}` : item.pluginDefinitionId,
-            definitionId: item.pluginDefinitionId,
-            stageId: item.id,
-            scopeId: 'root',
-            parentId: null,
-            enabled: true,
-            config: {},
-          }])}
+          onAdd={selected => void updateInstances(instances => [...instances, ...instancesFor(selected, instances)])}
         />
       </div>
 
