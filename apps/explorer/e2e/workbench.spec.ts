@@ -127,6 +127,8 @@ test('exports the selected run and refuses to import it twice', async () => {
 
   await page.getByLabel('导入运行').setInputFiles(path!)
   await expect(page.locator('.banner--error')).toContainText('already exists')
+  await expect(page.locator('.banner--error')).toContainText('导入运行失败。原因：')
+  await expect(page.locator('.banner--error')).toContainText('本仓库已有这次运行，不需要再导入。')
   await page.getByRole('button', { name: '知道了' }).click()
 })
 

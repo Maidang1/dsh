@@ -18,6 +18,7 @@ import type {
 } from '@harness-explorer/contracts'
 import { TraceBuffer } from '@harness-explorer/trace/browser'
 import { api, ApiError, subscribeRun } from './api'
+import { describeFailure } from './errors'
 import type { Draft, LearningProgress, LessonProgressUpdate, LessonsResponse, PublicCatalog, StorageUsage } from './api'
 
 export const DRAFT_ID = 'main'
@@ -86,10 +87,6 @@ interface ExplorerState {
 
 let unsubscribe: (() => void) | null = null
 const buffers = new Map<string, TraceBuffer>()
-
-function message(error: unknown) {
-  return error instanceof Error ? error.message : String(error)
-}
 
 export const useExplorer = create<ExplorerState>((set, get) => {
   const ingest = (runId: string, records: TraceRecord[], payloads: Record<string, JsonValue>) => {
@@ -204,7 +201,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         const latest = runtime.runId ?? runs[0]?.runId ?? null
         if (latest) await get().selectRun(latest)
       } catch (error) {
-        set({ error: message(error) })
+        set({ error: describeFailure('load', error) })
       }
     },
 
@@ -214,13 +211,13 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       try {
         await loadRun(runId, get().runtime?.runId === runId)
       } catch (error) {
-        set({ error: message(error) })
+        set({ error: describeFailure('openRun', error) })
       }
     },
 
     async setCompareRun(runId) {
       set({ compareRunId: runId })
-      if (runId) await loadRun(runId, false).catch(error => set({ error: message(error) }))
+      if (runId) await loadRun(runId, false).catch(error => set({ error: describeFailure('compareRun', error) }))
     },
 
     setCursor: cursor => set({ cursor }),
@@ -240,7 +237,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         if (error instanceof ApiError && error.status === 409) {
           set({ draft: await api.draft(DRAFT_ID), error: `草稿已在其他标签页修改，已载入最新版本：${error.message}` })
         } else {
-          set({ error: message(error) })
+          set({ error: describeFailure('saveDraft', error) })
         }
       }
     },
@@ -253,7 +250,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         await loadRun(runId, true)
         await get().refreshRuns()
       } catch (error) {
-        set({ error: message(error) })
+        set({ error: describeFailure('run', error) })
       }
     },
 
@@ -288,7 +285,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         await loadRun(runId, true)
         await get().refreshRuns()
       } catch (error) {
-        set({ error: message(error) })
+        set({ error: describeFailure('runStage', error) })
       }
     },
 
@@ -302,7 +299,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       try {
         set({ progress: await api.updateLessonProgress(lessonId, update) })
       } catch (error) {
-        set({ progress: previous, error: message(error) })
+        set({ progress: previous, error: describeFailure('progress', error) })
       }
     },
 
@@ -325,7 +322,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         })
         await get().refreshRuns()
       } catch (error) {
-        set({ error: `删除失败：${message(error)}` })
+        set({ error: describeFailure('deleteRun', error) })
       }
     },
 
@@ -338,7 +335,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         await api.pinRun(runId, pinned)
         await get().refreshRuns()
       } catch (error) {
-        set({ storage: previous, error: message(error) })
+        set({ storage: previous, error: describeFailure('pinRun', error) })
       }
     },
 
@@ -348,13 +345,13 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         await get().refreshRuns()
         await get().selectRun(manifest.runId)
       } catch (error) {
-        set({ error: `导入失败：${message(error)}` })
+        set({ error: describeFailure('importRun', error) })
       }
     },
 
     async cancel() {
       const runId = get().runtime?.runId
-      if (runId) await api.cancelRun(runId).catch(error => set({ error: message(error) }))
+      if (runId) await api.cancelRun(runId).catch(error => set({ error: describeFailure('cancel', error) }))
     },
   }
 })
