@@ -89,7 +89,9 @@ interface ActiveRun {
   killed: boolean
   /** Set once the run is settled and written; reconnecting clients get it replayed. */
   finished: { finalSeq: number; outcome: RunOutcome } | null
+  /** Serialized store writes; never rejects, the first failure is kept in writeError. */
   writes: Promise<void>
+  writeError: unknown
   timers: NodeJS.Timeout[]
   done: Promise<void>
   resolveDone: () => void
@@ -181,6 +183,7 @@ export class RunController {
       killed: false,
       finished: null,
       writes: Promise.resolve(),
+      writeError: undefined,
       timers: [],
       done,
       resolveDone,
@@ -269,6 +272,13 @@ export class RunController {
       }
     })
 
+    // Spawn failures (e.g. a missing Node binary) emit 'error' and possibly no 'exit'.
+    child.on('error', (error) => {
+      if (run.settled) return
+      run.settled = { outcome: 'failed', truncated: true, error: { name: 'SpawnError', message: redactText(error.message, secrets), sourceRefIds: [] } }
+      if (child.exitCode === null && child.pid === undefined) void this.settle(run)
+    })
+
     child.on('exit', (code) => {
       for (const timer of run.timers) clearTimeout(timer)
       if (!run.settled) {
@@ -296,7 +306,10 @@ export class RunController {
     }
     if (!fresh.length) return
     const toWrite = new Map([...payloads].filter(([ref]) => fresh.some(record => [record.payloadRef, record.beforeRef, record.afterRef].includes(ref))))
-    run.writes = run.writes.then(() => this.options.store.appendTrace(run.runId, fresh, toWrite))
+    // After the first failed write the on-disk trace would have a gap, so stop writing.
+    run.writes = run.writes
+      .then(() => (run.writeError === undefined ? this.options.store.appendTrace(run.runId, fresh, toWrite) : undefined))
+      .catch((error: unknown) => { run.writeError ??= error })
     this.emit({ type: 'trace', runId: run.runId, records: fresh })
     if (fresh.some(record => record.name === TraceName.pluginPhase || record.name.startsWith('registration/'))) {
       this.emit({ type: 'state', state: this.state() })
@@ -324,15 +337,20 @@ export class RunController {
     else if (this.phase === 'running') this.transition({ type: 'ENDED' })
     else if (this.phase === 'stopping') this.transition({ type: 'STOPPED' })
     const finalSeq = run.records.length - 1
+    await run.writes
+    const notSaved = (error: unknown) => {
+      this.error = { name: 'StoreError', message: `run ${run.runId} was not saved: ${error instanceof Error ? error.message : String(error)}`, sourceRefIds: [] }
+    }
+    if (run.writeError !== undefined) notSaved(run.writeError)
     try {
-      await run.writes
       await this.options.store.updateManifest(run.runId, {
         outcome: settled.outcome,
-        lastSeq: finalSeq,
-        completeness: settled.truncated ? 'truncated' : 'complete',
+        // A failed trace write leaves only a prefix on disk; never claim it is complete.
+        lastSeq: run.writeError === undefined ? finalSeq : -1,
+        completeness: settled.truncated || run.writeError !== undefined ? 'truncated' : 'complete',
       })
     } catch (error) {
-      this.error = { name: 'StoreError', message: `run ${run.runId} was not saved: ${error instanceof Error ? error.message : String(error)}`, sourceRefIds: [] }
+      if (run.writeError === undefined) notSaved(error)
     }
     this.error ??= settled.error
     run.finished = { finalSeq, outcome: settled.outcome }

@@ -6,7 +6,7 @@ import { createServer } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { existsSync, readFileSync, statSync } from 'node:fs'
-import { extname, join, normalize } from 'node:path'
+import { extname, isAbsolute, join, normalize, relative } from 'node:path'
 import { AdapterMode } from '@harness-explorer/contracts'
 import type { JsonValue, TraceRecord } from '@harness-explorer/contracts'
 import { z, ZodError } from 'zod'
@@ -197,7 +197,12 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
 
   async function api(request: IncomingMessage, response: ServerResponse, url: URL) {
     const method = request.method ?? 'GET'
-    const parts = url.pathname.split('/').slice(2).map(decodeURIComponent)
+    let parts: string[]
+    try {
+      parts = url.pathname.split('/').slice(2).map(decodeURIComponent)
+    } catch {
+      throw new HttpError(400, 'malformed path')
+    }
     const route = `${method} /${parts.map((part, index) => (index % 2 === 1 ? ':id' : part)).join('/')}`
 
     switch (route) {
@@ -275,9 +280,16 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
       response.end('<!doctype html><meta charset="utf-8"><title>Harness Explorer</title><p>界面尚未构建。API 位于 /api。</p>')
       return
     }
-    const relative = normalize(decodeURIComponent(url.pathname)).replace(/^([/\\])+/, '')
-    let path = join(dir, relative)
-    if (!path.startsWith(dir)) throw new HttpError(403, 'path escapes the static root')
+    let decoded: string
+    try {
+      decoded = decodeURIComponent(url.pathname)
+    } catch {
+      throw new HttpError(400, 'malformed path')
+    }
+    const requested = normalize(decoded).replace(/^([/\\])+/, '')
+    let path = join(dir, requested)
+    const inside = relative(dir, path)
+    if (inside.startsWith('..') || isAbsolute(inside)) throw new HttpError(403, 'path escapes the static root')
     if (existsSync(path) && statSync(path).isDirectory()) path = join(path, 'index.html')
     if (!existsSync(path) && existsSync(`${path}.html`)) path = `${path}.html`
     if (!existsSync(path)) throw new HttpError(404, 'not found')
@@ -286,6 +298,8 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
   }
 
   const server = createServer(async (request, response) => {
+    response.setHeader('x-content-type-options', 'nosniff')
+    response.setHeader('referrer-policy', 'no-referrer')
     try {
       // DNS rebinding: only our own host names are accepted.
       if (!hosts.includes(request.headers.host ?? '')) throw new HttpError(421, 'unexpected Host header')
