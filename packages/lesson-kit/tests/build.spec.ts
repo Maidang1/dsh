@@ -52,6 +52,14 @@ describe('lesson build', () => {
     }
   })
 
+  it('fails when the catalog requires differ from what the stage source injects', async () => {
+    const options = await buildOptions()
+    const stage = options.stages.find(item => item.id === 'tool-guard@00-observe')!
+    const drifted = { ...stage, requires: ['tools', 'systemPrompt'] }
+    await expect(buildLessons({ ...options, stages: [drifted], contentDir: join(outDir, 'no-content'), outDir }))
+      .rejects.toThrow('stage tool-guard@00-observe injects [tools] but the catalog lists requires [systemPrompt, tools]')
+  })
+
   it('includes runtime imports and leaves out type-only ones', () => {
     expect(stage('prompt-contributor@02-section').files.map(file => file.path))
       .toEqual(['packages/teaching-plugins/prompt-contributor/stages/02-section/index.ts'])

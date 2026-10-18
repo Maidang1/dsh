@@ -75,8 +75,26 @@ async function buildStage(stage: ExecutableStageDefinition, options: BuildOption
     }
   }
 
+  await checkDeclaredRequires(stage)
   const modulePath = toPosix(relative(options.repoRoot, outfile))
   return { definition: { ...stage, module: modulePath, sourceHash }, modulePath, files, sourceRefs }
+}
+
+/**
+ * The services a stage requires come from its source (docs/02 §5.1): the
+ * `inject` it exports, or the static `inject` of a default-exported plugin
+ * class. A catalog entry that disagrees fails the build instead of drawing
+ * wrong dependency edges and validating compositions against stale needs.
+ */
+async function checkDeclaredRequires(stage: ExecutableStageDefinition) {
+  const module = await import(pathToFileURL(stage.module).href) as { inject?: unknown; default?: { inject?: unknown } }
+  const declared = module.inject ?? module.default?.inject ?? []
+  if (!Array.isArray(declared)) throw new LessonBuildError(`stage ${stage.id} declares inject as an object; only service lists are supported`)
+  const actual = [...declared].map(String).sort()
+  const listed = [...stage.requires].sort()
+  if (actual.join(',') !== listed.join(',')) {
+    throw new LessonBuildError(`stage ${stage.id} injects [${actual.join(', ')}] but the catalog lists requires [${listed.join(', ')}]`)
+  }
 }
 
 async function importData(path: string): Promise<unknown> {
@@ -153,7 +171,8 @@ export async function buildLessons(options: BuildOptions): Promise<LessonBuild> 
   }
 
   const stageList = [...stages.values()]
-  const contentVersion = sha256(JSON.stringify({ stages: stageList.map(stage => stage.definition.sourceHash), lessons }))
+  // Definitions include requires/provides, so a dependency change is a content change too.
+  const contentVersion = sha256(JSON.stringify({ stages: stageList.map(stage => stage.definition), lessons }))
   const result = LessonBuild.parse({ schemaVersion: 1, contentVersion, upstreamCommit: options.upstreamCommit, stages: stageList, lessons })
   await mkdir(options.outDir, { recursive: true })
   await writeFile(join(options.outDir, 'lessons.json'), JSON.stringify(result, null, 2) + '\n')
