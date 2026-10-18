@@ -8,7 +8,7 @@
 
 | 阶段 | 主要交付 | 依赖 | 初步工作量 |
 |---|---|---|---|
-| P0 | 基线、语义契约、Code Hike/Worker 技术验证 | 无 | 3–5 人日 |
+| P0 | 基线、语义契约、Code Hike/Node 技术验证 | 无 | 3–5 人日 |
 | P1 | 工程骨架、类型、内容构建骨架 | P0 | 2–3 人日 |
 | P2 | 无 UI 的最小运行时、记录和回放 | P1 | 5–8 人日 |
 | P3 | 插件树、轨迹和数据对比实验台 | P2 | 4–6 人日 |
@@ -39,17 +39,17 @@
 
 验收：核心规则有源码/测试依据，尚未支持的分支有明确状态，没有自造的上游状态名称。
 
-### P0-03 Code Hike 与 Worker 技术验证
+### P0-03 Code Hike 与 Node 技术验证
 
-工作：构建一个两阶段 TypeScript 示例，使用同一份代码生成动态展示和 Worker 模块。验证 Next.js 静态导出、代码过渡、模块哈希、Worker 构建及部署路径。
+工作：构建一个两阶段 TypeScript 示例，使用同一份代码生成动态展示和 Node 执行模块。验证本地启动、代码过渡、模块哈希、子进程加载、本地 API 与 SSE 轨迹订阅。
 
 交付：最小验证页面、兼容版本表、技术决策记录。
 
-验收：第二阶段代码变化确实改变 Worker 结果；关闭动画仍可读；静态构建产物能运行；不使用 eval。
+验收：第二阶段代码变化确实改变 Node 实际执行结果；关闭动画仍可读；本地构建产物能启动并读取选定环境信息；不使用 eval。
 
 ### P0-04 Cordis 复用决策
 
-工作：核查固定版本包是否能在浏览器 Worker 中独立构建；用一个服务、一个消费者和一个 disposer 验证挂载/等待/卸载。
+工作：核查固定版本的 Cordis 与上游插件是否能在 Node 子进程中直接复用；用一个服务、一个消费者和一个 disposer 验证挂载/等待/卸载。
 
 交付：复用或精简重实现的决定、包体积和不支持项、基础契约执行方式。
 
@@ -63,13 +63,13 @@
 
 ### P1-01 初始化 workspace
 
-建立 apps/explorer、contracts、teaching-runtime、teaching-plugins、trace、lesson-kit。配置 TypeScript strict、格式检查、Vitest、Playwright 和 CI。只安装实际需要的依赖。
+建立 apps/explorer、apps/local-server、contracts、teaching-runtime、teaching-plugins、trace、lesson-kit。配置 TypeScript strict、格式检查、Vitest、Playwright 和 CI。只安装实际需要的依赖。
 
 验收：干净环境 install、typecheck、build、基础测试通过；包依赖方向无循环；README 提供可验证启动说明。
 
 ### P1-02 建立公共协议
 
-实现 ExperimentRevision、PluginInstance、SourceRef、TraceRecord、RunManifest、Worker envelope 和 Zod schema。
+实现插件定义、实例、作用域、PluginRuntimeState、RuntimeState、ExperimentRevision、SourceRef、TraceRecord、RunManifest、环境快照、Node 协议 envelope 和 Zod schema。
 
 验收：非法版本、缺失 ID、错误 payload 被拒绝；导入数据不触发代码执行；类型与运行时 schema 一致。
 
@@ -105,11 +105,17 @@
 
 验收：固定输入生成请求、流式响应和正确结算；拒绝输入不伪造 step；请求准备取消不提前提交用户/system；错误状态可解释。
 
-### P2-05 Recorder、Reducer 和 Worker
+### P2-05 Recorder、Reducer 和 Node 运行宿主
 
-记录不可变数据、SourceRef、因果 span 和 seq。构建纯回放 reducer、初始快照、事件批传与 run settlement。
+记录不可变数据、SourceRef、因果 span 和 seq。构建纯回放 reducer、初始快照、Node 全局运行状态机、子进程管理、事件批传与 run settlement。环境值与资源句柄保留在 Node，传输数据脱敏。
 
-验收：同一场景重复运行规范化结果相同；从头回放与快照跳转结果相同；旧 Worker 消息不会污染新运行；finalSeq 缺失时不显示完整。
+验收：同一场景重复运行规范化结果相同；从头回放与快照跳转结果相同；旧运行子进程消息不会污染新运行；finalSeq 缺失时不显示完整；浏览器刷新可重连，强制停止不宣称清理成功。
+
+### P2-06 实际环境与适配器
+
+接入明确选择的环境变量、工作目录与真实模型适配器，记录环境来源及适配器模式；确定性模型继续使用相同插件执行与观测链路。具体真实文件操作纳入后续明确声明的插件支持范围。
+
+验收：Node 实际读取环境并执行真实请求，界面数据由 recorder 产生；环境变量秘密值不进入浏览器或导出轨迹；无凭证时仍可执行确定性场景；真实外部结果不冒充严格可重复对照。
 
 ### P2 退出条件
 
@@ -223,7 +229,7 @@
 
 ### P7-04 构建与发布验收
 
-构建静态产物并执行 Playwright 核心流程，检查子路径部署、Worker URL 和离线内容资源。生产发布按实际用户部署指令执行，不因本计划自动发布。
+构建本地 Node 应用并执行 Playwright 核心流程，检查启动命令、UI 资源、运行子进程模块、本地通信与刷新重连。生产发布按实际用户部署指令执行，不因本计划自动发布。
 
 验收：无凭证也能完整体验第一版；构建、行为、内容和端到端检查全部通过。
 
