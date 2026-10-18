@@ -15,6 +15,11 @@
 - 期望：开启与关闭观测时，Sessions 服务实际提交的持久事件一致，且与轨迹记录一致；关闭观测时只剩场景检查点。
 - 验证：`packages/teaching-runtime/tests/observation.spec.ts`。状态：verified。
 
+### EXPORT-01 运行导出与导入
+
+- 期望：导出包含 manifest、revision、场景、脱敏环境、轨迹与 payload；导入到另一仓库后可回放；篡改的 payload、revision、序号缺口、外来记录和缺失 payload 被拒绝；未结算运行导入为 interrupted；不覆盖已有运行；导入不执行代码。
+- 验证：`apps/local-server/tests/export.spec.ts`、`apps/explorer/e2e/workbench.spec.ts`。状态：verified。
+
 ### HOST-01 刷新与重连
 
 - 期望：重连不重新执行场景；按 Last-Event-ID 只补发缺失记录；缺口显式标记。
@@ -33,7 +38,7 @@
 ### SEC-01 密钥与本机信息
 
 - 期望：运行仓库、SSE 与导出不含环境变量值、凭据和绝对路径。
-- 验证：`controller.spec.ts`（运行仓库，含 real 模式子进程）、`server.spec.ts`（catalog 不含模块路径，`/api/environment` 只含存在标记）、`teaching-runtime/tests/real-adapter.spec.ts`（HTTP 错误与轨迹不含密钥）。导出尚未实现。状态：partial。
+- 验证：`controller.spec.ts`（运行仓库，含 real 模式子进程）、`server.spec.ts`（catalog 不含模块路径，`/api/environment` 只含存在标记）、`teaching-runtime/tests/real-adapter.spec.ts`（HTTP 错误与轨迹不含密钥）。导出见 `apps/local-server/tests/export.spec.ts`「SEC-01」。状态：verified。
 
 ### SEC-02 本地服务访问控制
 

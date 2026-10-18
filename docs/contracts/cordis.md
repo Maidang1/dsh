@@ -16,7 +16,7 @@
 ### CTX-03 作用域隔离
 
 - 期望：在嵌套作用域注册的内容不影响兄弟或外层作用域的组装。
-- 验证：`prompt-contract.spec.ts`「PROMPT-03」覆盖提示词层；服务级作用域（`ctx.isolate`）尚未覆盖。状态：partial。
+- 验证：`prompt-contract.spec.ts`「PROMPT-03」覆盖提示词层；`cordis-baseline.spec.ts`「CTX-03 probe」覆盖服务级 `ctx.isolate`：兄弟作用域各自解析自己的提供者，未提供的一侧保持 pending。状态：verified。
 
 ### LIFE-01 卸载贡献插件
 
@@ -26,8 +26,9 @@
 
 ### LIFE-02 清理失败
 
-- 期望：清理抛错时运行不报告为成功。
-- 验证：运行结算捕获清理异常并记为 failed（`packages/teaching-runtime/src/runner.ts`）；尚无专门测试。状态：planned。
+- 上游：`vendor/cordis/src/fiber.ts` 的 `_unload` 捕获 disposer 异常并只交给 `ctx.logger.error`，`dispose()` 仍然成功返回。
+- 期望：教学运行时通过只读的 logger exporter 捕获这些错误；场景卸载步骤或运行结算中的清理失败使运行 failed，并记录归属实例的诊断；其余实例照常卸载。
+- 验证：`packages/teaching-runtime/tests/turn-contract.spec.ts`「LIFE-02」。状态：verified。
 
 ### EVT-01 两层 waterfall
 

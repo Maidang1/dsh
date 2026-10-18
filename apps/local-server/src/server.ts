@@ -15,7 +15,7 @@ import { ControlError } from './controller.ts'
 import type { ControllerEvent, RunController } from './controller.ts'
 import { captureEnvironment } from './environment.ts'
 import { commitDraft } from './experiments.ts'
-import { ConflictError, Draft, NotFoundError } from './store.ts'
+import { ConflictError, Draft, InvalidBundleError, NotFoundError } from './store.ts'
 import type { RunStore } from './store.ts'
 
 export interface ServerOptions {
@@ -39,6 +39,7 @@ export interface RunningServer {
 
 const SESSION_COOKIE = 'explorer_session'
 const MAX_BODY = 1024 * 1024
+const MAX_IMPORT_BODY = 32 * 1024 * 1024
 
 class HttpError extends Error {
   constructor(readonly status: number, message: string) {
@@ -74,12 +75,12 @@ function cookie(request: IncomingMessage, name: string) {
   return undefined
 }
 
-async function readBody(request: IncomingMessage): Promise<unknown> {
+async function readBody(request: IncomingMessage, limit = MAX_BODY): Promise<unknown> {
   let size = 0
   const chunks: Buffer[] = []
   for await (const chunk of request) {
     size += (chunk as Buffer).length
-    if (size > MAX_BODY) throw new HttpError(413, 'request body too large')
+    if (size > limit) throw new HttpError(413, 'request body too large')
     chunks.push(chunk as Buffer)
   }
   if (!chunks.length) return {}
@@ -246,6 +247,18 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
         const records = await store.readTrace(parts[1]!, Number.isInteger(fromSeq) && fromSeq > 0 ? fromSeq : 0)
         return sendJson(response, 200, { records, payloads: await storedPayloads(records) })
       }
+      case 'GET /runs/:id/export': {
+        const bundle = await store.exportRun(parts[1]!)
+        response.writeHead(200, {
+          'content-type': 'application/json; charset=utf-8',
+          'content-disposition': `attachment; filename="${bundle.manifest.runId}.json"`,
+          'cache-control': 'no-store',
+        })
+        response.end(JSON.stringify(bundle))
+        return
+      }
+      case 'POST /imports':
+        return sendJson(response, 201, await store.importRun(await readBody(request, MAX_IMPORT_BODY)))
       case 'GET /payloads/:id':
         return sendJson(response, 200, await store.getPayload(parts[1]!))
       case 'GET /events':
@@ -308,6 +321,7 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
       const status = error instanceof HttpError ? error.status
         : error instanceof ControlError ? { busy: 409, invalid: 400, 'not-found': 404, internal: 500 }[error.code]
           : error instanceof ConflictError ? 409
+            : error instanceof InvalidBundleError ? 400
             : error instanceof NotFoundError ? 404
               : error instanceof ZodError ? 400
                 : 500

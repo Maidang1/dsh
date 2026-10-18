@@ -80,6 +80,7 @@ export const api = {
   commitDraft: (id: string) => request<ExperimentRevision>(`/api/drafts/${encodeURIComponent(id)}/commit`, { method: 'POST' }),
   startRun: (revisionId: string, adapterMode: AdapterMode) =>
     request<{ runId: string }>('/api/runs', { method: 'POST', json: { revisionId, adapterMode } }),
+  importRun: (bundle: unknown) => request<RunManifest>('/api/imports', { method: 'POST', json: bundle }),
   cancelRun: (runId: string) => request<{ cancelling: string }>(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }),
 }
 

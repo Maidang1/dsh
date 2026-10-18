@@ -200,6 +200,7 @@ export class RunController {
     }
     this.transition({ type: 'VALID' })
     await this.options.store.createRun(manifest, captureEnvironment(adapterMode, this.options.env))
+    await this.options.store.saveRunScenario(runId, start.scenario)
     this.spawn(this.active, start)
     return runId
   }

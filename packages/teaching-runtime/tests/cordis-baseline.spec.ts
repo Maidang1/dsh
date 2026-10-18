@@ -89,6 +89,36 @@ describe('Cordis dependency lifecycle (CTX-01, CTX-02, LIFE-01 probes)', () => {
   })
 })
 
+describe('Cordis service isolation (CTX-03 probe)', () => {
+  it('resolves each isolated sibling scope to its own provider without leaking', async () => {
+    const root = new Context()
+    const left = root.isolate('greeter')
+    const right = root.isolate('greeter')
+    class Named extends Service {
+      constructor(ctx: Context, readonly label: string) {
+        super(ctx, 'greeter')
+      }
+      greet() {
+        return this.label
+      }
+    }
+    left.plugin({ name: 'left-provider', apply: (ctx: Context) => { new Named(ctx, 'left') } })
+    const seen: string[] = []
+    const consumer = (ctx: Context) => { seen.push((ctx.greeter as unknown as Named).greet()) }
+    const leftConsumer = left.plugin({ name: 'left-consumer', inject: ['greeter'], apply: consumer })
+    const rightConsumer = right.plugin({ name: 'right-consumer', inject: ['greeter'], apply: consumer })
+    await flush()
+    expect(seen).toEqual(['left'])
+    expect(leftConsumer.state).toBe(FiberState.ACTIVE)
+    expect(rightConsumer.state).toBe(FiberState.PENDING)
+    expect(root.get('greeter')).toBeUndefined()
+
+    right.plugin({ name: 'right-provider', apply: (ctx: Context) => { new Named(ctx, 'right') } })
+    await flush()
+    expect(seen).toEqual(['left', 'right'])
+  })
+})
+
 describe('Cordis waterfall (EVT-01, EVT-02 probes)', () => {
   it('is around-middleware: outer enters, delegates, and returns last', () => {
     const root = new Context()

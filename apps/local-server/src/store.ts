@@ -6,7 +6,7 @@
 import { appendFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { Composition, EnvironmentSnapshot, ExperimentRevision, RunManifest, TraceRecord } from '@harness-explorer/contracts'
+import { Composition, EnvironmentSnapshot, ExperimentRevision, JsonValue as JsonValueSchema, RunManifest, Scenario, TraceRecord } from '@harness-explorer/contracts'
 import type { JsonValue, RunOutcome } from '@harness-explorer/contracts'
 import { hashJson } from '@harness-explorer/trace'
 import { z } from 'zod'
@@ -20,6 +20,26 @@ export const Draft = z.object({
   seed: z.number().int(),
 })
 export type Draft = z.infer<typeof Draft>
+
+/**
+ * Portable run export (docs/02 §13): everything needed to replay a run and
+ * bind it to its composition without the original store. Data only.
+ */
+export const RunBundle = z.object({
+  schemaVersion: z.literal(1),
+  exportedAt: z.iso.datetime(),
+  manifest: RunManifest,
+  revision: ExperimentRevision,
+  scenario: Scenario.nullable(),
+  environment: EnvironmentSnapshot,
+  records: z.array(TraceRecord),
+  payloads: z.record(z.string(), JsonValueSchema),
+})
+export type RunBundle = z.infer<typeof RunBundle>
+
+export class InvalidBundleError extends Error {
+  override name = 'InvalidBundleError'
+}
 
 export class ConflictError extends Error {
   override name = 'ConflictError'
@@ -194,6 +214,72 @@ export class RunStore {
       recovered.push(manifest.runId)
     }
     return recovered
+  }
+
+  // Export and import ---------------------------------------------------------
+
+  async exportRun(runId: string): Promise<RunBundle> {
+    const manifest = await this.getManifest(runId)
+    const records = await this.readTrace(runId)
+    const payloads: Record<string, JsonValue> = {}
+    for (const ref of new Set(records.flatMap(record => [record.payloadRef, record.beforeRef, record.afterRef]).filter((ref): ref is string => !!ref))) {
+      payloads[ref] = await this.getPayload(ref)
+    }
+    const scenarioPath = this.path('runs', safeName(runId), 'scenario.json')
+    return RunBundle.parse({
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      manifest,
+      revision: await this.getRevision(manifest.experimentRevisionId),
+      scenario: existsSync(scenarioPath) ? JSON.parse(await readFile(scenarioPath, 'utf8')) : null,
+      environment: await this.getEnvironment(runId),
+      records,
+      payloads,
+    })
+  }
+
+  async saveRunScenario(runId: string, scenario: Scenario) {
+    await this.writeJson(this.path('runs', safeName(runId), 'scenario.json'), Scenario.parse(scenario))
+  }
+
+  /** Validate and store an exported run. Nothing in the bundle is executed. */
+  async importRun(raw: unknown): Promise<RunManifest> {
+    const parsed = RunBundle.safeParse(raw)
+    if (!parsed.success) throw new InvalidBundleError(`not a run export: ${parsed.error.issues[0]?.message ?? 'invalid'}`)
+    const bundle = parsed.data
+    const { manifest, revision, records } = bundle
+    const { id: _id, revisionHash, ...content } = revision
+    if (hashJson(content as JsonValue) !== revisionHash) throw new InvalidBundleError('revision does not match its revisionHash')
+    if (manifest.revisionHash !== revisionHash || manifest.experimentRevisionId !== revision.id) {
+      throw new InvalidBundleError('manifest is bound to a different revision')
+    }
+    records.forEach((record, index) => {
+      if (record.runId !== manifest.runId) throw new InvalidBundleError(`record ${index} belongs to run ${record.runId}`)
+      if (record.seq !== index) throw new InvalidBundleError(`records are not contiguous at seq ${index}`)
+    })
+    for (const [ref, value] of Object.entries(bundle.payloads)) {
+      if (hashJson(value) !== ref) throw new InvalidBundleError(`payload ${ref} does not match its content hash`)
+    }
+    for (const record of records) {
+      for (const ref of [record.payloadRef, record.beforeRef, record.afterRef]) {
+        if (ref && !(ref in bundle.payloads)) throw new InvalidBundleError(`payload ${ref} of record ${record.seq} is missing`)
+      }
+    }
+    if (existsSync(this.path('runs', safeName(manifest.runId)))) throw new ConflictError(`run ${manifest.runId} already exists`)
+
+    const lastSeq = records.length - 1
+    const stored: RunManifest = {
+      ...manifest,
+      lastSeq,
+      ...manifest.outcome === 'running' ? { outcome: 'interrupted', completeness: 'truncated' } : {},
+      ...lastSeq < manifest.lastSeq ? { completeness: 'truncated' } : {},
+    }
+    const revisionPath = this.path('revisions', `${safeName(revision.id)}.json`)
+    if (!existsSync(revisionPath)) await this.writeJson(revisionPath, revision)
+    await this.createRun(stored, { ...bundle.environment, cwd: '<workspace>' })
+    if (bundle.scenario) await this.saveRunScenario(manifest.runId, bundle.scenario)
+    await this.appendTrace(manifest.runId, records, new Map(Object.entries(bundle.payloads)))
+    return stored
   }
 
   // Progress ------------------------------------------------------------------

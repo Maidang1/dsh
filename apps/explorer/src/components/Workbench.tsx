@@ -69,6 +69,20 @@ export function Workbench() {
             {state.runs.map(run => <option key={run.runId} value={run.runId}>{run.runId} · {outcomeText(run.outcome)}</option>)}
           </select>
         </label>
+        {state.selectedRunId ? <a className="button" href={`/api/runs/${encodeURIComponent(state.selectedRunId)}/export`} download>导出运行</a> : null}
+        <label className="button">
+          导入运行
+          <input
+            type="file"
+            accept="application/json"
+            className="sr-only"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (file) void state.importRun(file)
+              event.target.value = ''
+            }}
+          />
+        </label>
         <div className="segmented" role="group" aria-label="图层">
           {(['composition', 'dependency', 'data'] as const).map(layer => (
             <button key={layer} type="button" aria-pressed={state.layer === layer} onClick={() => state.setLayer(layer)}>

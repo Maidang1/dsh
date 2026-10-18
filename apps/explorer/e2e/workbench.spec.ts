@@ -58,6 +58,21 @@ test('keeps the run after a reload and offers a text list of the tree', async ()
   await expect(page.getByRole('complementary', { name: '实例摘要' })).toContainText('提供systemPrompt')
 })
 
+test('exports the selected run and refuses to import it twice', async () => {
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('link', { name: '导出运行' }).click()
+  const download = await downloadPromise
+  const path = await download.path()
+  const { readFile } = await import('node:fs/promises')
+  const bundle = JSON.parse(await readFile(path!, 'utf8'))
+  expect(bundle).toMatchObject({ schemaVersion: 1, manifest: { outcome: 'completed' } })
+  expect(bundle.records.length).toBe(bundle.manifest.lastSeq + 1)
+
+  await page.getByLabel('导入运行').setInputFiles(path!)
+  await expect(page.locator('.banner--error')).toContainText('already exists')
+  await page.getByRole('button', { name: '知道了' }).click()
+})
+
 test('offers the real model only when the key is configured', async () => {
   const real = page.getByLabel('模型').locator('option[value="real"]')
   await expect(real).toHaveJSProperty('disabled', true)

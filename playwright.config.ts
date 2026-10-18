@@ -1,4 +1,8 @@
+import { existsSync } from 'node:fs'
 import { defineConfig } from '@playwright/test'
+
+// Use the preinstalled Chromium when present; CI installs Playwright's own.
+const executablePath = process.env.PW_CHROMIUM ?? (existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined)
 
 const port = 4397
 export const LAUNCH_TOKEN = 'e2e-launch-token'
@@ -14,7 +18,7 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${port}`,
     actionTimeout: 10_000,
     storageState: STORAGE_STATE,
-    launchOptions: { executablePath: process.env.PW_CHROMIUM ?? '/opt/pw-browsers/chromium' },
+    ...executablePath ? { launchOptions: { executablePath } } : {},
   },
   webServer: {
     command: `rm -rf .explorer-e2e && env -u DEEPSEEK_API_KEY EXPLORER_STORE=.explorer-e2e EXPLORER_PORT=${port} EXPLORER_TOKEN=${LAUNCH_TOKEN} pnpm -s explorer`,

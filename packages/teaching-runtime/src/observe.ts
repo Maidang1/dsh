@@ -23,6 +23,12 @@ export class Observer {
   currentStepId: string | undefined
   /** Called after a teaching checkpoint is recorded. */
   onCheckpoint: ((name: string) => void) | undefined
+  /**
+   * Errors Cordis logged instead of throwing, e.g. a disposer that failed
+   * during unload (fiber.ts `_unload`). The runner drains them after each
+   * lifecycle operation so a failed cleanup is never reported as success.
+   */
+  readonly loggedErrors: Array<{ instanceId: string | undefined; message: string }> = []
 
   /**
    * With `recording` off nothing is observed; only the checkpoint hook that
@@ -36,6 +42,22 @@ export class Observer {
   ) {
     if (recording) this.listen()
     else this.disposers.push(root.on('explorer/checkpoint', name => this.onCheckpoint?.(name)))
+    this.disposers.push(root.logger.exporter({
+      export: (message) => {
+        if (message.type !== 'error') return
+        const reason = message.args[0]
+        const instanceId = this.instanceOf(message.fiber?.deref())
+        const text = reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason)
+        this.loggedErrors.push({ instanceId, message: text })
+        if (recording) {
+          this.record({ kind: 'diagnostic', name: TraceName.diagnostic, ...instanceId ? { instanceId } : {}, payload: { level: 'error', message: `Cordis logged: ${text}` } })
+        }
+      },
+    }))
+  }
+
+  drainLoggedErrors() {
+    return this.loggedErrors.splice(0)
   }
 
   /** Mount through this so the fiber is attributed to the composition instance. */

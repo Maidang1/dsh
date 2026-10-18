@@ -72,6 +72,8 @@ interface ExplorerState {
    */
   runLessonStage(lessonId: string, definitionId: string, stageId: string, scenarioId: string): Promise<void>
   cancel(): Promise<void>
+  /** Import an exported run; it is stored as data and selected, never executed. */
+  importRun(file: File): Promise<void>
   dismissError(): void
 }
 
@@ -275,6 +277,16 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         set({ runs: await api.runs() })
       } catch (error) {
         set({ error: message(error) })
+      }
+    },
+
+    async importRun(file) {
+      try {
+        const manifest = await api.importRun(JSON.parse(await file.text()))
+        set({ runs: await api.runs() })
+        await get().selectRun(manifest.runId)
+      } catch (error) {
+        set({ error: `导入失败：${message(error)}` })
       }
     },
 

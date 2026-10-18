@@ -190,3 +190,37 @@ describe('TURN-02: cancelling while the request is being prepared', () => {
     expect(result.error?.message).toMatch(/was never reached/)
   })
 })
+
+describe('LIFE-02: a failing cleanup is never reported as success', () => {
+  const leaky = inlineStage('leaky', [], {
+    name: 'leaky',
+    apply(ctx: Context) {
+      ctx.effect(() => () => { throw new Error('disposer exploded') })
+    },
+  })
+
+  it('fails an unmount step and records which instance failed', async () => {
+    const result = await run({
+      ...withInline(minimalChat(), leaky),
+      scenario: scenario([{ kind: 'unmount', id: 'drop', instanceId: 'leaky' }]),
+    })
+    expect(result.outcome).toBe('failed')
+    expect(result.error).toEqual({ name: 'CleanupError', message: 'cleanup of "leaky" failed: Error: disposer exploded' })
+    const diagnostics = result.recorder.records.filter(record => record.name === TraceName.diagnostic && record.instanceId === 'leaky')
+    expect(diagnostics).toHaveLength(1)
+  })
+
+  it('fails settlement but still unloads every other instance', async () => {
+    const result = await run({
+      ...withInline(minimalChat(), leaky),
+      scenario: scenario([{ kind: 'snapshot', id: 'look', label: 'look' }]),
+    })
+    expect(result.outcome).toBe('failed')
+    expect(result.error?.name).toBe('CleanupError')
+    const lastPhases = new Map<string, unknown>()
+    for (const record of result.recorder.records.filter(item => item.name === TraceName.pluginPhase)) {
+      lastPhases.set(record.instanceId!, payloadOf<{ phase: unknown }>(result, record).phase)
+    }
+    expect([...lastPhases.values()].every(phase => phase === null)).toBe(true)
+  })
+})

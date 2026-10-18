@@ -70,6 +70,10 @@ export class CompositionError extends Error {
   override name = 'CompositionError'
 }
 
+export class CleanupError extends Error {
+  override name = 'CleanupError'
+}
+
 /** Static checks that do not need to run any plugin code (docs/02 §7). */
 export function validateComposition(composition: Composition, scenario: Scenario, stages: readonly ExecutableStageDefinition[]) {
   const stageById = new Map(stages.map(stage => [stage.id, stage]))
@@ -162,7 +166,14 @@ export async function runScenario(input: RunInput): Promise<RunResult> {
     const fiber = fibers.get(instanceId)
     if (!fiber) throw new Error(`instance "${instanceId}" is not mounted`)
     fibers.delete(instanceId)
+    observer.drainLoggedErrors()
     await fiber.dispose()
+    await settle()
+    // Cordis contains disposer failures and only logs them; surface them (LIFE-02).
+    const failures = observer.drainLoggedErrors()
+    if (failures.length) {
+      throw new CleanupError(`cleanup of "${instanceId}" failed: ${failures.map(failure => failure.message).join('; ')}`)
+    }
   }
 
   // A cancel step arms a trigger; the next turn is aborted when it reaches that checkpoint.
@@ -228,13 +239,19 @@ export async function runScenario(input: RunInput): Promise<RunResult> {
     observer.currentStepId = undefined
     recorder.record({ kind: 'checkpoint', name: TraceName.runSettle, payload: { outcome } })
     // Run settlement: unload in reverse mount order so cleanup is recorded.
-    try {
-      for (const instanceId of [...fibers.keys()].reverse()) await unmount(instanceId)
-      await settle()
-    } catch (reason) {
+    // Unload everything even when one cleanup fails, then report every failure.
+    const cleanupFailures: string[] = []
+    for (const instanceId of [...fibers.keys()].reverse()) {
+      try {
+        await unmount(instanceId)
+      } catch (reason) {
+        cleanupFailures.push(reason instanceof Error ? reason.message : String(reason))
+      }
+    }
+    if (cleanupFailures.length) {
       outcome = 'failed'
-      error ??= { name: 'CleanupError', message: reason instanceof Error ? reason.message : String(reason) }
-      recorder.record({ kind: 'diagnostic', name: TraceName.diagnostic, payload: { level: 'error', message: `cleanup failed: ${error.message}` } })
+      error ??= { name: 'CleanupError', message: cleanupFailures.join('; ') }
+      recorder.record({ kind: 'diagnostic', name: TraceName.diagnostic, payload: { level: 'error', message: `settlement cleanup failed: ${cleanupFailures.join('; ')}` } })
     }
     observer.dispose()
   }
