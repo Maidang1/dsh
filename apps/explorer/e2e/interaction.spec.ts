@@ -9,6 +9,22 @@ import type { Page } from '@playwright/test'
 
 const FEEDBACK_MS = 100
 
+// Tests here edit the draft; put it back so the other specs see the preset composition.
+// Before the first page load the draft does not exist yet, and the page creates it.
+let original: ({ version: number } & Record<string, unknown>) | null
+test.beforeEach(async ({ request }) => {
+  const response = await request.get('/api/drafts/main')
+  original = response.ok() ? await response.json() : null
+})
+test.afterEach(async ({ request, baseURL }) => {
+  if (!original) return
+  const { version: _version, ...draft } = original
+  const { version } = await request.get('/api/drafts/main').then(response => response.json()) as { version: number }
+  if (version === original.version) return
+  const response = await request.put('/api/drafts/main', { data: { expectedVersion: version, draft }, headers: { origin: baseURL! } })
+  expect(response.ok(), await response.text()).toBe(true)
+})
+
 /** Click `selector` in the page and time until `done` holds, then one more frame. */
 async function feedback(page: Page, selector: string, done: string): Promise<number> {
   return page.evaluate(async ({ selector, done }) => {
@@ -56,7 +72,6 @@ test('adding a plugin keeps the viewport', async ({ page }) => {
   await expect(added).toBeVisible()
   expect(await viewport.evaluate(element => getComputedStyle(element).transform)).toBe(before)
 
-  // Leave the draft as the other specs expect it.
   await added.click()
   await page.getByRole('button', { name: '从组合中移除…' }).click()
   await page.getByRole('button', { name: '确认移除' }).click()
@@ -64,7 +79,6 @@ test('adding a plugin keeps the viewport', async ({ page }) => {
 })
 
 test('adds a plugin together with the providers of its missing services', async ({ page }) => {
-  const original = await page.request.get('/api/drafts/main').then(response => response.json()) as { version: number }
   await page.goto('/')
   const node = (name: string) => page.locator(`.react-flow__node[data-id="${name}"]`)
   await node('tools').click()
@@ -82,11 +96,6 @@ test('adds a plugin together with the providers of its missing services', async 
   await expect(node('tools')).toBeVisible()
   await expect(node('calculator')).toBeVisible()
 
-  // Restore the draft the other specs expect.
-  const { version: _version, ...draft } = original
-  const { version } = await page.request.get('/api/drafts/main').then(response => response.json()) as typeof original
-  const response = await page.request.put('/api/drafts/main', { data: { expectedVersion: version, draft }, headers: { origin: new URL(page.url()).origin } })
-  expect(response.ok()).toBe(true)
 })
 
 test('filters the plugin library by responsibility', async ({ page }) => {
@@ -100,4 +109,33 @@ test('filters the plugin library by responsibility', async ({ page }) => {
   await expect(names).toHaveText(['tool-guard'])
   await filter.getByRole('button', { name: '全部' }).click()
   await expect(names).toHaveCount(10)
+})
+
+test('shows a waiting instance as waiting for a service and offers its provider', async ({ page }) => {
+  await page.goto('/')
+  const node = (name: string) => page.locator(`.react-flow__node[data-id="${name}"]`)
+  await node('tools').click()
+  await page.getByRole('button', { name: '从组合中移除…' }).click()
+  await page.getByRole('button', { name: '确认移除' }).click()
+  await expect(node('tools')).toHaveCount(0)
+
+  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
+  await page.getByRole('button', { name: '运行教学代码' }).click()
+  await expect(page.getByText(/运行结果：/)).toBeVisible({ timeout: 20_000 })
+  await expect(node('agent-loop')).toContainText('等待服务')
+  await node('agent-loop').click()
+  const fix = page.getByLabel('修复建议')
+  await expect(fix).toContainText('缺少服务 tools')
+  await fix.getByRole('button', { name: '添加提供者：tools' }).click()
+  // The provider goes into the draft; the run keeps the composition it ran.
+  await page.getByLabel('查看运行').selectOption('')
+  await expect(node('tools')).toBeVisible()
+
+  // Lesson stage runs start from the selected (latest) run's composition; do not leave this one behind.
+  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
+    if (runsBefore.includes(run.runId)) continue
+    const response = await page.request.delete(`/api/runs/${run.runId}`, { headers: { origin: new URL(page.url()).origin } })
+    expect(response.ok()).toBe(true)
+  }
+
 })

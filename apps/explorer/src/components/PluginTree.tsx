@@ -12,21 +12,9 @@ import type { Composition, PluginPhasePayload } from '@harness-explorer/contract
 import type { ViewSnapshot } from '@harness-explorer/trace/browser'
 import type { PublicStage } from '@/lib/api'
 import type { Layer } from '@/lib/store'
+import { phaseOf } from '@/lib/phase'
 
-export const PHASE_LABEL: Record<string, { mark: string; text: string }> = {
-  active: { mark: '●', text: '已激活' },
-  pending: { mark: '◐', text: '等待中' },
-  loading: { mark: '↻', text: '加载中' },
-  failed: { mark: '✕', text: '失败' },
-  unloading: { mark: '⇣', text: '卸载中' },
-  null: { mark: '○', text: '无活动 Fiber' },
-  none: { mark: '·', text: '本次运行未加载' },
-}
-
-export function phaseOf(plugin: PluginPhasePayload | undefined) {
-  if (!plugin) return PHASE_LABEL.none!
-  return PHASE_LABEL[String(plugin.phase)]!
-}
+export { PHASE_LABEL, phaseOf } from '@/lib/phase'
 
 type PluginNodeData = {
   instanceId: string
@@ -37,12 +25,12 @@ type PluginNodeData = {
 }
 
 function PluginNode({ data }: NodeProps<Node<PluginNodeData>>) {
-  const phase = phaseOf(data.plugin)
+  const phase = phaseOf(data.plugin, data.enabled)
   return (
     <div className={`plugin-node phase-${String(data.plugin?.phase ?? 'none')}${data.selected ? ' is-selected' : ''}`}>
       <Handle type="target" position={Position.Top} />
       <div className="plugin-node__title">{data.instanceId}</div>
-      <div className="plugin-node__stage">{data.stageId}{data.enabled ? '' : ' · 由场景挂载'}</div>
+      <div className="plugin-node__stage">{data.stageId}</div>
       <div className="plugin-node__phase"><span aria-hidden>{phase.mark}</span> {phase.text}</div>
       {data.plugin?.reason ? <div className="plugin-node__reason">{data.plugin.reason}</div> : null}
       <Handle type="source" position={Position.Bottom} />

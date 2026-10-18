@@ -1,8 +1,9 @@
 'use client'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { TimelineRows } from './TimelineRows'
-import type { AdapterMode, EnvironmentSnapshot, PluginInstance, PluginResponsibility, RuntimeState } from '@harness-explorer/contracts'
+import type { AdapterMode, EnvironmentSnapshot, PluginInstance, PluginPhasePayload, PluginResponsibility, RuntimeState } from '@harness-explorer/contracts'
 import type { ViewRegistration, ViewSnapshot } from '@harness-explorer/trace/browser'
 import type { Draft, LessonsResponse, PublicCatalog, PublicStage } from '@/lib/api'
 import type { RunData } from '@/lib/store'
@@ -91,6 +92,9 @@ interface InspectorProps {
   stagesOfDefinition: PublicStage[]
   /** Consumers that would lose a provider if this instance were removed from the draft. */
   consumers: AffectedConsumer[]
+  /** Stages that would provide the services this instance's stage lacks in the draft. */
+  missingProviders: PublicStage[]
+  onAddProviders(): void
   onRemove(id: string): void
   onStage(id: string, stageId: string): void
   onEnabled(id: string, enabled: boolean): void
@@ -126,10 +130,38 @@ function RemoveControl({ instanceId, consumers, registrations, onRemove }: {
   )
 }
 
-export function Inspector({ instance, stage, snapshot, lessons, editable, stagesOfDefinition, consumers, onRemove, onStage, onEnabled, history, seq, onCursor }: InspectorProps) {
+/** Where to go next for a non-active instance (docs/01 §5.3). */
+function StateFix({ plugin, enabled, unavailable, editable, missingProviders, onAddProviders }: {
+  plugin: PluginPhasePayload | undefined
+  enabled: boolean
+  unavailable: string[]
+  editable: boolean
+  missingProviders: PublicStage[]
+  onAddProviders(): void
+}) {
+  let fix: ReactNode = null
+  if (!plugin && !enabled) {
+    fix = <>勾选下方“运行开始时挂载”，或运行包含挂载步骤的场景。</>
+  } else if (plugin?.phase === 'pending' && plugin.dependencyStatus === 'missing') {
+    fix = missingProviders.length ? (
+      <>
+        缺少服务 {unavailable.join('、') || '（见原因）'}。
+        {editable
+          ? <button type="button" onClick={onAddProviders}>添加提供者：{missingProviders.map(item => item.pluginDefinitionId).join('、')}</button>
+          : '返回草稿后可以添加提供者。'}
+      </>
+    ) : <>草稿中已有提供 {unavailable.join('、') || '所需服务'} 的实例；重新运行后查看是否解析，或检查提供者自身的状态。</>
+  } else if (plugin?.phase === 'failed') {
+    fix = <>在下方时间线中查看该实例的诊断记录，切换到其他阶段，或进入插件实现阅读代码。</>
+  }
+  return fix ? <p className="state-fix" aria-label="修复建议">修复：{fix}</p> : null
+}
+
+export function Inspector({ instance, stage, snapshot, lessons, editable, stagesOfDefinition, consumers, missingProviders, onAddProviders, onRemove, onStage, onEnabled, history, seq, onCursor }: InspectorProps) {
   if (!instance) return <aside className="inspector"><p className="muted">选择插件树中的一个实例查看状态与依赖。</p></aside>
   const plugin = snapshot.plugins[instance.id]
-  const phase = phaseOf(plugin)
+  const phase = phaseOf(plugin, instance.enabled)
+  const unavailable = (stage?.requires ?? []).filter(service => !snapshot.services[service]?.available)
   const registrations = Object.values(snapshot.registrations).filter(item => item.instanceId === instance.id)
   const lesson = lessons?.lessons.find(item => item.pluginDefinitionId === instance.definitionId)
   return (
@@ -142,10 +174,21 @@ export function Inspector({ instance, stage, snapshot, lessons, editable, stages
         <dt>状态</dt><dd>{phase.mark} {phase.text}</dd>
         {plugin ? <><dt>依赖</dt><dd>{{ resolved: '已解析', missing: '缺失', unknown: '未知' }[plugin.dependencyStatus]}</dd></> : null}
         {plugin?.reason ? <><dt>原因</dt><dd>{plugin.reason}</dd></> : null}
+        {plugin && (plugin.phase === 'pending' || plugin.phase === 'failed') && !plugin.reason && !plugin.error
+          ? <><dt>原因</dt><dd className="muted">未知（运行器没有报告原因）</dd></>
+          : null}
         {plugin?.error ? <><dt>错误</dt><dd className="error-text">{plugin.error.name}: {plugin.error.message}</dd></> : null}
         <dt>需要</dt><dd>{stage?.requires.join('、') || '无'}</dd>
         <dt>提供</dt><dd>{stage?.provides.join('、') || '无'}</dd>
       </dl>
+      <StateFix
+        plugin={plugin}
+        enabled={instance.enabled}
+        unavailable={unavailable}
+        editable={editable}
+        missingProviders={missingProviders}
+        onAddProviders={onAddProviders}
+      />
       <h3>状态变化</h3>
       {history.length ? (
         <ol className="phase-history" aria-label="状态变化（点击跳到该位置）">

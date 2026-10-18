@@ -6,7 +6,7 @@ import { phaseHistory, useReplay } from '@/lib/replay'
 import { PluginList, PluginTree } from './PluginTree'
 import { Inspector, PluginLibrary, RunBar, Timeline, outcomeText } from './Panels'
 import { RequestDiff } from './RequestDiff'
-import { affectedConsumers, instancesFor } from '@/lib/library'
+import { affectedConsumers, instancesFor, planAddition } from '@/lib/library'
 
 type BottomTab = 'timeline' | 'diff'
 
@@ -162,6 +162,10 @@ export function Workbench() {
           editable={source === 'draft' || !draftDiffers}
           stagesOfDefinition={catalog.stages.filter(item => item.pluginDefinitionId === instance?.definitionId)}
           consumers={instance ? affectedConsumers(catalog.stages, composition.instances, instance.id) : []}
+          missingProviders={stage ? planAddition(catalog.stages, composition.instances, stage).stages.slice(0, -1) : []}
+          onAddProviders={() => {
+            if (stage) void updateInstances(instances => [...instances, ...instancesFor(planAddition(catalog.stages, instances, stage).stages.slice(0, -1), instances)])
+          }}
           onRemove={id => void updateInstances(instances => instances.filter(item => item.id !== id))}
           onStage={(id, stageId) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, stageId } : item)))}
           onEnabled={(id, enabled) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, enabled } : item)))}
