@@ -34,6 +34,7 @@ function recovery(action: FailedAction, status: number | null): string {
     return '请求内容无效：刷新页面后重试。'
   }
   if (status === 404) return '对象已不存在：刷新页面更新列表。'
+  if (status === 412) return '课程构建已过期：在终端运行 pnpm lessons:build，再重启 pnpm explorer。'
   if (status === 413) return '文件过大：导入文件上限为 32 MB。'
   return '本地服务内部错误：查看终端输出的详细信息后重试。'
 }

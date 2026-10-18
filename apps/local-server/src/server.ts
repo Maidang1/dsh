@@ -361,7 +361,7 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
         return
       }
       const status = error instanceof HttpError ? error.status
-        : error instanceof ControlError ? { busy: 409, invalid: 400, 'not-found': 404, internal: 500 }[error.code]
+        : error instanceof ControlError ? { busy: 409, invalid: 400, 'not-found': 404, stale: 412, internal: 500 }[error.code]
           : error instanceof ConflictError ? 409
             : error instanceof InvalidBundleError ? 400
             : error instanceof NotFoundError ? 404

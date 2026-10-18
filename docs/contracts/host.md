@@ -7,8 +7,8 @@
 
 ### BUILD-01 代码展示与执行
 
-- 期望：同一阶段的展示代码与执行模块来自同一组源文件，sourceHash 相同；锚点错误阻断构建。
-- 验证：`packages/lesson-kit/tests`。状态：verified。
+- 期望：同一阶段的展示代码与执行模块来自同一组源文件，sourceHash 相同；锚点错误阻断构建。构建记录打包模块的 moduleHash；每次运行前控制服务核对展示代码、当前源码与打包模块，任一不一致即以 412 拒绝运行，不启动子进程。
+- 验证：`packages/lesson-kit/tests`、`apps/local-server/tests/built-catalog.spec.ts`。状态：verified。
 
 ### OBS-01 观测不改变语义
 

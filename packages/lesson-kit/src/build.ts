@@ -77,7 +77,8 @@ async function buildStage(stage: ExecutableStageDefinition, options: BuildOption
 
   await checkDeclaredRequires(stage)
   const modulePath = toPosix(relative(options.repoRoot, outfile))
-  return { definition: { ...stage, module: modulePath, sourceHash }, modulePath, files, sourceRefs }
+  const moduleHash = sha256(await readFile(outfile, 'utf8'))
+  return { definition: { ...stage, module: modulePath, sourceHash }, modulePath, moduleHash, files, sourceRefs }
 }
 
 /**

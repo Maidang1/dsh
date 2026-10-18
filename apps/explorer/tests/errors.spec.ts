@@ -10,6 +10,7 @@ describe('error messages', () => {
     ['a run imported twice', 'importRun', new ApiError(409, 'run r already exists'), '本仓库已有这次运行'],
     ['an import file that is not JSON', 'importRun', new SyntaxError('Unexpected token'), '不是有效的运行导出'],
     ['an expired session', 'saveDraft', new ApiError(401, 'open the launch URL'), '用终端打印的启动链接重新打开'],
+    ['a lesson build older than the source', 'run', new ApiError(412, 'the source of stage x changed after the lesson build'), '在终端运行 pnpm lessons:build'],
     ['an unreachable service', 'openRun', new TypeError('Failed to fetch'), 'pnpm explorer 仍在运行'],
   ] as const)('%s', (_name, action, error, text) => {
     expect(describeFailure(action, error)).toContain(text)

@@ -23,7 +23,7 @@ import { compositionForMode, validateComposition } from '@harness-explorer/teach
 import { emptySnapshot, reduceTrace } from '@harness-explorer/trace'
 import type { ViewSnapshot } from '@harness-explorer/trace'
 import { createActor, setup } from 'xstate'
-import { scenarioHash } from './catalog.ts'
+import { StaleBuildError, scenarioHash } from './catalog.ts'
 import type { Catalog } from './catalog.ts'
 import { captureEnvironment, redactText, RUN_VARIABLES, secretValues } from './environment.ts'
 import { ChildMessage } from './ipc.ts'
@@ -55,7 +55,7 @@ export const runControlMachine = setup({ types: { events: {} as ControlEvent } }
 })
 
 export class ControlError extends Error {
-  constructor(readonly code: 'busy' | 'invalid' | 'not-found' | 'internal', message: string) {
+  constructor(readonly code: 'busy' | 'invalid' | 'not-found' | 'stale' | 'internal', message: string) {
     super(message)
     this.name = 'ControlError'
   }
@@ -165,6 +165,10 @@ export class RunController {
         throw new ControlError(error.name === 'NotFoundError' ? 'not-found' : 'invalid', error.message)
       })
       start = this.validate(revision, adapterMode)
+      // Shown code, current source and executed module must agree before anything runs.
+      await this.options.catalog.verifyStages?.(start.stages).catch((error: Error) => {
+        throw error instanceof StaleBuildError ? new ControlError('stale', error.message) : error
+      })
     } catch (error) {
       this.error = { name: 'ValidationError', message: error instanceof Error ? error.message : String(error), sourceRefIds: [] }
       this.transition({ type: 'INVALID' })
