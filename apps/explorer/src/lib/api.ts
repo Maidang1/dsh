@@ -120,6 +120,13 @@ export interface StreamHandlers {
  * Subscribe to a run over SSE. EventSource reconnects by itself and sends the
  * last seq as Last-Event-ID, so the server only resends the missing tail.
  */
+/** Runtime state only, so a tab notices runs started or settled by another tab. */
+export function subscribeState(onState: (state: RuntimeState) => void): () => void {
+  const source = new EventSource('/api/events?stateOnly=1')
+  source.addEventListener('state', event => onState(JSON.parse((event as MessageEvent).data)))
+  return () => source.close()
+}
+
 export function subscribeRun(runId: string | null, handlers: StreamHandlers): () => void {
   const source = new EventSource(`/api/events${runId ? `?runId=${encodeURIComponent(runId)}` : ''}`)
   source.addEventListener('open', () => handlers.onConnection(true))

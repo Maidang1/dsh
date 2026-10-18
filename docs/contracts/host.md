@@ -33,8 +33,8 @@
 
 ### HOST-02 运行隔离
 
-- 期望：每次运行新建子进程；忙时拒绝 RUN；旧运行消息被丢弃。
-- 验证：`apps/local-server/tests/controller.spec.ts`。状态：verified。
+- 期望：每次运行新建子进程；忙时拒绝 RUN；旧运行消息被丢弃。每个标签页通过 `/api/events?stateOnly=1` 接收运行状态（不含轨迹），其他标签页发起或结算的运行无需刷新即进入运行列表，并可选择观看正在进行的运行。
+- 验证：`apps/local-server/tests/controller.spec.ts`、`server.spec.ts`（stateOnly）、`apps/explorer/e2e/interaction.spec.ts`（第二个标签页）。状态：verified。
 
 ### HOST-03 控制服务异常退出
 

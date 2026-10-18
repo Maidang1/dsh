@@ -147,7 +147,8 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
     const write = (event: string, data: unknown, id?: number) => {
       response.write(`${id !== undefined ? `id: ${id}\n` : ''}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
     }
-    const runId = url.searchParams.get('runId') ?? controller.current?.runId ?? null
+    // stateOnly: runtime state for every tab, without any run's trace.
+    const runId = url.searchParams.has('stateOnly') ? null : url.searchParams.get('runId') ?? controller.current?.runId ?? null
     const lastEventId = request.headers['last-event-id']
     let fromSeq = lastEventId !== undefined ? Number(lastEventId) + 1 : Number(url.searchParams.get('fromSeq') ?? 0)
     if (!Number.isInteger(fromSeq) || fromSeq < 0) fromSeq = 0

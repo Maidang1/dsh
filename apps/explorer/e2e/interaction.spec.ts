@@ -166,3 +166,25 @@ test('a trace record leads to its instance and the code of the stage that ran', 
     if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
   }
 })
+
+test('a second tab learns about a run started in another tab without reloading', async ({ page, context }) => {
+  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
+  const other = await context.newPage()
+  await other.goto('/')
+  await expect(other.getByRole('button', { name: '运行教学代码' })).toBeEnabled()
+  const optionsBefore = await other.getByLabel('查看运行').locator('option').count()
+
+  await page.goto('/')
+  await page.getByRole('button', { name: '运行教学代码' }).click()
+  await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
+  const runId = await page.getByLabel('查看运行').inputValue()
+
+  // The other tab only watches the runtime state stream; its run list follows.
+  await expect(other.getByLabel('查看运行').locator(`option[value="${runId}"]`)).toHaveCount(1)
+  expect(await other.getByLabel('查看运行').locator('option').count()).toBe(optionsBefore + 1)
+
+  const origin = { origin: new URL(page.url()).origin }
+  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
+    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
+  }
+})

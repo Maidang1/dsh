@@ -17,7 +17,7 @@ import type {
   TraceRecord,
 } from '@harness-explorer/contracts'
 import { TraceBuffer } from '@harness-explorer/trace/browser'
-import { api, ApiError, subscribeRun } from './api'
+import { api, ApiError, subscribeRun, subscribeState } from './api'
 import { describeFailure } from './errors'
 import type { Draft, LearningProgress, LessonProgressUpdate, LessonsResponse, PublicCatalog, StorageUsage } from './api'
 
@@ -86,6 +86,7 @@ interface ExplorerState {
 }
 
 let unsubscribe: (() => void) | null = null
+let stopStateWatch: (() => void) | null = null
 const buffers = new Map<string, TraceBuffer>()
 
 export const useExplorer = create<ExplorerState>((set, get) => {
@@ -198,6 +199,14 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         const storage = await api.storage().catch(() => null)
         const progress = await api.progress().catch(() => ({ lessons: {} }))
         set({ ready: true, catalog, compositions, runtime, runs, draft, lessons, environment, storage, progress })
+        stopStateWatch ??= subscribeState((next) => {
+          const before = get().runtime
+          set({ runtime: next })
+          // A run started or settled elsewhere (another tab, a lesson page) appears in the list without a reload.
+          if (next.runId !== before?.runId || (next.phase === 'idle') !== (before?.phase === 'idle')) {
+            void get().refreshRuns().catch(() => {})
+          }
+        })
         const latest = runtime.runId ?? runs[0]?.runId ?? null
         if (latest) await get().selectRun(latest)
       } catch (error) {

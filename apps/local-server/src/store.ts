@@ -78,6 +78,12 @@ export class NotFoundError extends Error {
   override name = 'NotFoundError'
 }
 
+/** Treat a file that disappeared between listing and reading as `value`; rethrow anything else. */
+const missingAs = <T>(value: T) => (error: unknown): T => {
+  if ((error as NodeJS.ErrnoException).code === 'ENOENT') return value
+  throw error
+}
+
 /** Revision ids are derived from the content hash, so equal content shares one id. */
 const revisionIdOf = (revisionHash: string) => `rev-${revisionHash.slice('sha256:'.length, 'sha256:'.length + 16)}`
 
@@ -338,12 +344,13 @@ export class RunStore {
 
   // Capacity ------------------------------------------------------------------
 
+  /** Bytes under `dir`. Runs keep writing meanwhile, so entries that vanish (renamed temp files, deleted runs) count as 0. */
   private async dirBytes(dir: string): Promise<number> {
-    if (!existsSync(dir)) return 0
+    const entries = await readdir(dir, { withFileTypes: true }).catch(missingAs([]))
     let total = 0
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
+    for (const entry of entries) {
       const path = join(dir, entry.name)
-      total += entry.isDirectory() ? await this.dirBytes(path) : (await stat(path)).size
+      total += entry.isDirectory() ? await this.dirBytes(path) : await stat(path).then(info => info.size, missingAs(0))
     }
     return total
   }

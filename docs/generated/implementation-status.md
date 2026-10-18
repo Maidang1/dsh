@@ -2,7 +2,7 @@
 
 按 `04-implementation-plan.md` §11 记录每个任务的完成情况：交付位置、验收依据（测试与契约）、未支持的边界。上游版本均为 `687f282e8625c6b8d11ff58211a90524be2e4317`。更新于 2026-10-18，对应提交 `e4f8f7f` 之后。
 
-验证命令：`pnpm typecheck`、`pnpm test`（167 个用例）、`pnpm lessons:build`、`pnpm lessons:verify`、`pnpm lessons:verify-upstream`、`pnpm build:ui`、`pnpm test:e2e`（27 个用例）。
+验证命令：`pnpm typecheck`、`pnpm test`（169 个用例）、`pnpm lessons:build`、`pnpm lessons:verify`、`pnpm lessons:verify-upstream`、`pnpm build:ui`、`pnpm test:e2e`（28 个用例）。
 
 ## P0 依据与技术验证
 
@@ -36,7 +36,7 @@
 
 | 任务 | 状态 | 交付 | 验收依据 | 未覆盖 |
 |---|---|---|---|---|
-| P3-00 本地 API 客户端 | 完成 | `apps/explorer/src/lib/api.ts`、SSE 重连 | `workbench.spec.ts`（刷新后保留运行） | — |
+| P3-00 本地 API 客户端 | 完成 | `apps/explorer/src/lib/api.ts`、SSE 重连、所有标签页订阅运行状态（其他标签页的运行出现在列表中，可观看） | `workbench.spec.ts`（刷新后保留运行） | — |
 | P3-01 插件树 | 完成 | 组合、依赖、运行数据三个图层，文本列表视图；状态区分未启用、等待服务、原因未知、加载失败、无活动 Fiber，检查器给出修复入口 | `workbench.spec.ts`、`phase.spec.ts`、`interaction.spec.ts` | 依赖图层只有 declared/resolved，没有 observed 边 |
 | P3-02 添加插件与实验版本 | 完成 | 插件库（按职责筛选、缺失服务与提供者、“同时添加依赖”）、移除前列出受影响消费者与注册项、草稿乐观并发、不可变 revision | `controller.spec.ts`、`server.spec.ts`、`apps/explorer/tests/library.spec.ts`、`interaction.spec.ts` | 依赖只在根作用域解析 |
 | P3-03 时间线与回放 | 完成 | 虚拟化列表、键盘操作、状态变化历史、1×/2×/4× 回放播放与暂停；当前记录指向所属实例与本次运行的阶段代码 | `workbench.spec.ts` | — |

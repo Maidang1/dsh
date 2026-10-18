@@ -67,3 +67,17 @@ it('keeps every pin when runs are pinned concurrently', async () => {
   await Promise.all([store.setPinned('run-1', true), store.setPinned('run-2', true)])
   expect([...await store.pinnedRuns()].sort()).toEqual(['run-1', 'run-2'])
 })
+
+it('measures storage while a run keeps rewriting its manifest', async () => {
+  let writing = true
+  const writer = (async () => {
+    for (let index = 0; writing && index < 400; index++) await store.updateManifest('run-1', { lastSeq: index })
+  })()
+  try {
+    for (let index = 0; index < 100; index++) await store.usage()
+  } finally {
+    writing = false
+    await writer
+  }
+  expect((await store.usage()).runs).toBe(1)
+})

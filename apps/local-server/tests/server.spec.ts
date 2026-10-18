@@ -181,4 +181,22 @@ describe('experiment API and HOST-01 reconnection', () => {
     const stored = JSON.parse((await authed(`/api/runs/${runId}/trace?fromSeq=5`)).body)
     expect(stored.records).toEqual(liveRecords.slice(5))
   })
+
+  it('streams runtime state without any trace to tabs that only watch (stateOnly)', async () => {
+    const composition: Composition = JSON.parse(await readFile(join(repo, 'fixtures/compositions/minimal-chat.json'), 'utf8'))
+    const draft = { id: 'state-watch', parentRevisionId: null, composition, scenarioId: 'prompt-section-lifecycle', seed: 1 }
+    await authed('/api/drafts/state-watch', { method: 'PUT', body: { expectedVersion: null, draft } })
+    const revision = JSON.parse((await authed('/api/drafts/state-watch/commit', { method: 'POST' })).body)
+    let started: Promise<{ body: string }> | undefined
+    const events = await readEvents('/api/events?stateOnly=1', (events) => {
+      // Start the run only once the stream is connected, so no transition is missed.
+      started ??= authed('/api/runs', { method: 'POST', body: { revisionId: revision.id, adapterMode: 'deterministic' } })
+      const phases = events.filter(event => event.event === 'state').map(event => event.data.phase as string)
+      return phases.some(phase => phase !== 'idle') && phases.at(-1) === 'idle'
+    })
+    const { runId } = JSON.parse((await started!).body)
+    expect(events.map(event => event.event)).not.toContain('trace')
+    expect(events.map(event => event.event)).not.toContain('settled')
+    expect(events.some(event => event.event === 'state' && event.data.runId === runId)).toBe(true)
+  })
 })

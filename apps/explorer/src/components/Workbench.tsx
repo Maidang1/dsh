@@ -94,6 +94,9 @@ export function Workbench() {
             {state.runs.map(run => <option key={run.runId} value={run.runId}>{run.runId} · {outcomeText(run.outcome)}</option>)}
           </select>
         </label>
+        {state.runtime?.runId && state.runtime.phase !== 'idle' && state.runtime.runId !== state.selectedRunId ? (
+          <button type="button" onClick={() => void state.selectRun(state.runtime!.runId)}>观看正在进行的运行 {state.runtime.runId}</button>
+        ) : null}
         {selected ? <ReplayPosition revisionId={selected.revision?.id} seq={replay.seq} lastSeq={replay.lastSeq} atScenarioEnd={state.cursor === null} /> : null}
         {state.selectedRunId ? (
           <>
