@@ -139,6 +139,8 @@ export function PluginTree({ composition, stages, snapshot, layer, selectedInsta
         onPaneClick={() => onSelect(null)}
         nodesDraggable={false}
         fitView
+        // The default 0.5 cannot fit a four-column scope on a phone-width screen.
+        minZoom={0.25}
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={24} />

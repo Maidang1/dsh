@@ -15,6 +15,7 @@ import { useExplorer } from '@/lib/store'
 import { LessonCode } from './CodePanel'
 import { phaseOf } from './PluginTree'
 import { outcomeText } from './Panels'
+import { NarrowTabs, narrowPane } from './NarrowTabs'
 
 type SideTab = 'architecture' | 'state' | 'upstream'
 
@@ -31,6 +32,7 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
   const state = useExplorer()
   const [index, setIndex] = useState(0)
   const [fileKey, setFileKey] = useState('entry')
+  const [pane, setPane] = useState<'code' | 'side'>('code')
   const [tab, setTab] = useState<SideTab>('architecture')
   useEffect(() => { void useExplorer.getState().init() }, [])
 
@@ -110,8 +112,14 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
 
       {state.error ? <div className="banner banner--error" role="alert">{state.error} <button type="button" onClick={state.dismissError}>知道了</button></div> : null}
 
+      <NarrowTabs<'code' | 'side'>
+        label="主区域"
+        panes={[{ id: 'code', title: '代码' }, { id: 'side', title: '架构、状态与上游' }]}
+        current={pane}
+        onSelect={setPane}
+      />
       <div className="lesson__main">
-        <section className="lesson__code" aria-label="代码">
+        <section className={`lesson__code${narrowPane(pane === 'code')}`} aria-label="代码">
           {view.files.length > 1 ? (
             <div className="segmented" role="tablist" aria-label="文件">
               {view.files.map(item => (
@@ -128,7 +136,7 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
           <LessonCode key={file.key} code={file.code} />
         </section>
 
-        <aside className="lesson__side">
+        <aside className={`lesson__side${narrowPane(pane === 'side')}`}>
           <div className="segmented" role="tablist" aria-label="旁侧面板">
             {(['architecture', 'state', 'upstream'] as const).map(item => (
               <button key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => setTab(item)}>

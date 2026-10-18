@@ -2,7 +2,7 @@
 
 按 `04-implementation-plan.md` §11 记录每个任务的完成情况：交付位置、验收依据（测试与契约）、未支持的边界。上游版本均为 `687f282e8625c6b8d11ff58211a90524be2e4317`。更新于 2026-10-18，对应提交 `e4f8f7f` 之后。
 
-验证命令：`pnpm typecheck`、`pnpm test`（161 个用例）、`pnpm lessons:build`、`pnpm lessons:verify`、`pnpm lessons:verify-upstream`、`pnpm build:ui`、`pnpm test:e2e`（22 个用例）。
+验证命令：`pnpm typecheck`、`pnpm test`（161 个用例）、`pnpm lessons:build`、`pnpm lessons:verify`、`pnpm lessons:verify-upstream`、`pnpm build:ui`、`pnpm test:e2e`（25 个用例）。
 
 ## P0 依据与技术验证
 
@@ -54,6 +54,6 @@
 | P5-04 上游行为对照 | 未完成 | — | — | 需要能运行上游的参考执行器；课程等级停在 contract-verified |
 | P6 协作式执行单步 | 未开始 | 语义检查点已存在（取消步骤使用） | — | 暂停/继续控制；按设计，界面不显示不可用的暂停按钮 |
 | P7-01 保存与导出 | 完成 | 导出导入、保留策略、容量提示、课程学习进度（阅读位置与已运行阶段） | EXPORT-01、STORE-01、`progress.spec.ts`、`lesson.spec.ts` | — |
-| P7-02 性能与可访问性 | 完成 | `docs/generated/performance.md`；键盘、列表视图、减少动画；错误提示包含失败的操作、原因与恢复操作 | `performance.spec.ts`（回放跳转）、`interaction.spec.ts`（点击反馈、视口稳定）、`errors.spec.ts` | 数值来自单一云端容器，未在其他机器上记录 |
+| P7-02 性能与可访问性 | 完成 | `docs/generated/performance.md`；键盘、列表视图、减少动画；错误提示包含失败的操作、原因与恢复操作；窄屏以标签页切换主区域，页面不横向滚动 | `performance.spec.ts`（回放跳转）、`interaction.spec.ts`（点击反馈、视口稳定）、`errors.spec.ts`、`narrow.spec.ts` | 数值来自单一云端容器，未在其他机器上记录 |
 | P7-03 文档与来源说明 | 完成 | README、契约、决策记录、本文件 | — | — |
 | P7-04 构建与发布验收 | 部分 | `pnpm build`、`pnpm test:e2e` | 本地与全新克隆中通过 | 未在 GitHub Actions 上验证；生产发布按设计不自动进行 |

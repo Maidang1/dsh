@@ -126,9 +126,20 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 .diff__added { background: var(--added); }
 .diff__removed { background: var(--removed); }
 
+/* Narrow screens: one main pane at a time, chosen by .narrow-tabs (docs/01 §10). */
+.narrow-tabs { display: none; }
+
 @media (max-width: 860px) {
+  .workbench { grid-template-rows: none; grid-template-columns: minmax(0, 1fr); }
+  /* Long option texts (scenario titles, run ids) must not widen the page. */
+  .run-bar { flex: 1 1 100%; min-width: 0; }
+  .workbench__header label, .workbench__subbar label { min-width: 0; max-width: 100%; }
+  .run-bar label { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .workbench__header select, .workbench__subbar select { max-width: 100%; }
   .workbench__main { grid-template-columns: 1fr; }
-  .workbench__tree { border-right: 0; border-bottom: 1px solid var(--border); }
+  .workbench__tree { border-right: 0; }
+  .workbench > .narrow-tabs { display: inline-flex; margin: 8px 16px 0; }
+  .workbench__main > .is-narrow-hidden { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -161,8 +172,12 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 .stage-text { max-width: 860px; }
 
 @media (max-width: 960px) {
+  .lesson { grid-template-rows: none; grid-template-columns: minmax(0, 1fr); }
+  .lesson__header select { max-width: 100%; }
   .lesson__main { grid-template-columns: 1fr; }
-  .lesson__code { border-right: 0; border-bottom: 1px solid var(--border); }
+  .lesson__code { border-right: 0; }
+  .lesson > .narrow-tabs { display: inline-flex; margin: 8px 16px 0; }
+  .lesson__main > .is-narrow-hidden { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .code-line { transition: none; }

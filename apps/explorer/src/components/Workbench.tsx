@@ -6,6 +6,7 @@ import { phaseHistory, useReplay } from '@/lib/replay'
 import { PluginList, PluginTree } from './PluginTree'
 import { Inspector, PluginLibrary, RunBar, Timeline, outcomeText } from './Panels'
 import { RequestDiff } from './RequestDiff'
+import { NarrowTabs, narrowPane } from './NarrowTabs'
 import { affectedConsumers, instancesFor, planAddition } from '@/lib/library'
 
 type BottomTab = 'timeline' | 'diff'
@@ -29,6 +30,7 @@ function StorageNote({ storage }: { storage: NonNullable<ReturnType<typeof useEx
 export function Workbench() {
   const state = useExplorer()
   const [tab, setTab] = useState<BottomTab>('timeline')
+  const [pane, setPane] = useState<'tree' | 'inspector'>('tree')
   useEffect(() => { void useExplorer.getState().init() }, [])
 
   const selected = state.selectedRunId ? state.runData[state.selectedRunId] : undefined
@@ -50,6 +52,12 @@ export function Workbench() {
   const instance = instanceById(composition, state.selectedInstanceId)
   const stage = catalog.stages.find(item => item.id === instance?.stageId)
   const draftDiffers = source === 'run' && JSON.stringify(composition) !== JSON.stringify(draft.composition)
+
+  // On narrow screens selecting an instance shows its summary; wide screens show both panes anyway.
+  const select = (id: string | null) => {
+    state.selectInstance(id)
+    if (id) setPane('inspector')
+  }
 
   const updateInstances = (update: (instances: typeof draft.composition.instances) => typeof draft.composition.instances) =>
     state.editDraft(current => ({ ...current, composition: { ...current.composition, instances: update(current.composition.instances) } }))
@@ -148,31 +156,39 @@ export function Workbench() {
         </div>
       ) : null}
 
+      <NarrowTabs<'tree' | 'inspector'>
+        label="主区域"
+        panes={[{ id: 'tree', title: '插件树' }, { id: 'inspector', title: instance ? `实例摘要（${instance.id}）` : '实例摘要' }]}
+        current={pane}
+        onSelect={setPane}
+      />
       <div className="workbench__main">
-        <section className="workbench__tree">
+        <section className={`workbench__tree${narrowPane(pane === 'tree')}`}>
           {state.listView
-            ? <PluginList composition={composition} snapshot={replay.snapshot} selectedInstanceId={state.selectedInstanceId} onSelect={state.selectInstance} />
-            : <PluginTree composition={composition} stages={catalog.stages} snapshot={replay.snapshot} layer={state.layer} selectedInstanceId={state.selectedInstanceId} onSelect={state.selectInstance} />}
+            ? <PluginList composition={composition} snapshot={replay.snapshot} selectedInstanceId={state.selectedInstanceId} onSelect={select} />
+            : <PluginTree composition={composition} stages={catalog.stages} snapshot={replay.snapshot} layer={state.layer} selectedInstanceId={state.selectedInstanceId} onSelect={select} />}
         </section>
-        <Inspector
-          instance={instance}
-          stage={stage}
-          snapshot={replay.snapshot}
-          lessons={state.lessons}
-          editable={source === 'draft' || !draftDiffers}
-          stagesOfDefinition={catalog.stages.filter(item => item.pluginDefinitionId === instance?.definitionId)}
-          consumers={instance ? affectedConsumers(catalog.stages, composition.instances, instance.id) : []}
-          missingProviders={stage ? planAddition(catalog.stages, composition.instances, stage).stages.slice(0, -1) : []}
-          onAddProviders={() => {
-            if (stage) void updateInstances(instances => [...instances, ...instancesFor(planAddition(catalog.stages, instances, stage).stages.slice(0, -1), instances)])
-          }}
-          onRemove={id => void updateInstances(instances => instances.filter(item => item.id !== id))}
-          onStage={(id, stageId) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, stageId } : item)))}
-          onEnabled={(id, enabled) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, enabled } : item)))}
-          history={phaseHistory(selected, instance?.id)}
-          seq={replay.seq}
-          onCursor={state.setCursor}
-        />
+        <div className={`workbench__inspector${narrowPane(pane === 'inspector')}`}>
+          <Inspector
+            instance={instance}
+            stage={stage}
+            snapshot={replay.snapshot}
+            lessons={state.lessons}
+            editable={source === 'draft' || !draftDiffers}
+            stagesOfDefinition={catalog.stages.filter(item => item.pluginDefinitionId === instance?.definitionId)}
+            consumers={instance ? affectedConsumers(catalog.stages, composition.instances, instance.id) : []}
+            missingProviders={stage ? planAddition(catalog.stages, composition.instances, stage).stages.slice(0, -1) : []}
+            onAddProviders={() => {
+              if (stage) void updateInstances(instances => [...instances, ...instancesFor(planAddition(catalog.stages, instances, stage).stages.slice(0, -1), instances)])
+            }}
+            onRemove={id => void updateInstances(instances => instances.filter(item => item.id !== id))}
+            onStage={(id, stageId) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, stageId } : item)))}
+            onEnabled={(id, enabled) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, enabled } : item)))}
+            history={phaseHistory(selected, instance?.id)}
+            seq={replay.seq}
+            onCursor={state.setCursor}
+          />
+        </div>
       </div>
 
       <section className="workbench__bottom">
