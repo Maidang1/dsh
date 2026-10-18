@@ -25,7 +25,7 @@ const DEFAULT_COMPOSITION = 'minimal-chat'
 
 export interface RunData {
   runId: string
-  records: TraceRecord[]
+  records: readonly TraceRecord[]
   payloads: Record<string, JsonValue>
   gaps: Array<{ fromSeq: number; toSeq: number }>
   settled: { finalSeq: number; outcome: RunManifest['outcome'] } | null
@@ -98,7 +98,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
             runId,
             revision: previous?.revision ?? null,
             settled: previous?.settled ?? null,
-            records: buffer.contiguous(),
+            // Append-only view of the buffer's contiguous prefix; no per-batch copy.
+            records: buffer.records,
             payloads: { ...previous?.payloads, ...payloads },
             gaps: buffer.gaps(),
           },

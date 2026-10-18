@@ -40,3 +40,18 @@ it('jumps anywhere in a 5,000-record trace within the p95 budget', () => {
   console.log(`replay index build ${buildMs.toFixed(1)} ms; jump p50 ${durations[100]!.toFixed(2)} ms, p95 ${p95.toFixed(2)} ms`)
   expect(p95).toBeLessThan(200)
 })
+
+it('indexes a live trace delivered in 100 batches in linear time', () => {
+  let clock = 0
+  const recorder = new Recorder({ runId: 'live', now: () => clock++ })
+  for (let index = 0; index < 5000; index++) {
+    recorder.record({ kind: 'session', name: TraceName.sessionEvent, sessionId: 's', payload: { sessionId: 's', type: 'assistant/message', data: { index } } })
+  }
+  const start = performance.now()
+  const index = new ReplayIndex([], ref => recorder.payloads.get(ref), 100)
+  for (let batch = 0; batch < 100; batch++) index.extend(recorder.records.slice(batch * 50, batch * 50 + 50))
+  const elapsed = performance.now() - start
+  console.log(`incremental indexing of 5,000 records in 100 batches: ${elapsed.toFixed(1)} ms`)
+  expect(index.lastSeq).toBe(4999)
+  expect(elapsed).toBeLessThan(1000)
+})

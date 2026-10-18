@@ -98,3 +98,31 @@ describe('TraceBuffer (HOST-01 receiver side)', () => {
     expect(() => buffer.add(sampleRecorder(1).records)).toThrow(/run-1/)
   })
 })
+
+describe('incremental replay and buffering', () => {
+  it('extending an index batch by batch equals building it at once', () => {
+    const recorder = sampleRecorder(530)
+    const resolve = (ref: string) => recorder.payloads.get(ref)
+    const whole = new ReplayIndex(recorder.records, resolve, 100)
+    const grown = new ReplayIndex([], resolve, 100)
+    for (let start = 0; start < recorder.records.length; start += 37) grown.extend(recorder.records.slice(start, start + 37))
+    for (const seq of [-1, 0, 99, 100, 250, 529]) expect(grown.at(seq)).toEqual(whole.at(seq))
+  })
+
+  it('rejects an extension that skips records', () => {
+    const recorder = sampleRecorder(5)
+    const index = new ReplayIndex(recorder.records.slice(0, 2), ref => recorder.payloads.get(ref))
+    expect(() => index.extend(recorder.records.slice(3))).toThrow(/expects seq 2/)
+  })
+
+  it('exposes the contiguous prefix without copying and keeps it stable across batches', () => {
+    const records = sampleRecorder(6).records
+    const buffer = new TraceBuffer('run-1')
+    const view = buffer.records
+    buffer.add(records.slice(2, 4))
+    expect(view).toHaveLength(0)
+    buffer.add(records.slice(0, 2))
+    expect(view).toBe(buffer.records)
+    expect(view.map(record => record.seq)).toEqual([0, 1, 2, 3])
+  })
+})

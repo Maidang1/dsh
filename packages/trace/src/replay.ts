@@ -87,29 +87,38 @@ export function reduceTrace(previous: ViewSnapshot, record: TraceRecord, resolve
 /**
  * Replay index with periodic snapshots: jumping loads the nearest earlier
  * snapshot and folds forward, never running reverse business operations.
+ * `extend` folds only the new records, so a live trace is indexed once.
  */
 export class ReplayIndex {
-  private readonly checkpoints: ViewSnapshot[] = []
+  private readonly records: TraceRecord[] = []
+  private readonly checkpoints: ViewSnapshot[] = [emptySnapshot()]
+  private latest = emptySnapshot()
 
   constructor(
-    private readonly records: readonly TraceRecord[],
+    records: readonly TraceRecord[],
     private readonly resolve: PayloadResolver,
     private readonly interval = 100,
   ) {
-    let snapshot = emptySnapshot()
-    this.checkpoints.push(snapshot)
-    for (const record of records) {
-      snapshot = reduceTrace(snapshot, record, resolve)
-      if ((record.seq + 1) % interval === 0) this.checkpoints.push(snapshot)
-    }
+    this.extend(records)
   }
 
   get lastSeq() {
     return this.records.length - 1
   }
 
+  /** Append records that continue the trace (seq lastSeq + 1 onward). */
+  extend(records: readonly TraceRecord[]) {
+    for (const record of records) {
+      this.latest = reduceTrace(this.latest, record, this.resolve)
+      this.records.push(record)
+      if ((record.seq + 1) % this.interval === 0) this.checkpoints.push(this.latest)
+    }
+    return this
+  }
+
   at(seq: number): ViewSnapshot {
     if (seq < -1 || seq > this.lastSeq) throw new RangeError(`seq ${seq} outside replay range -1..${this.lastSeq}`)
+    if (seq === this.lastSeq) return this.latest
     const checkpoint = this.checkpoints[Math.floor((seq + 1) / this.interval)]!
     let snapshot = checkpoint
     for (let index = checkpoint.seq + 1; index <= seq; index++) {

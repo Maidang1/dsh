@@ -8,9 +8,13 @@ export interface Gap {
 /**
  * Receiver-side buffer for TRACE_BATCH delivery: drops duplicates, accepts
  * out-of-order batches, and reports gaps instead of interpolating them.
+ * Work per batch is proportional to the batch, not to the whole trace.
  */
 export class TraceBuffer {
-  private readonly bySeq = new Map<number, TraceRecord>()
+  /** Records 0..n-1 with no hole; only ever appended to. */
+  private readonly prefix: TraceRecord[] = []
+  /** Records that arrived ahead of a hole. */
+  private readonly ahead = new Map<number, TraceRecord>()
   private finalSeq: number | null = null
 
   constructor(readonly runId: string) {}
@@ -21,9 +25,14 @@ export class TraceBuffer {
       if (record.runId !== this.runId) {
         throw new Error(`record of run ${record.runId} delivered to buffer of ${this.runId}`)
       }
-      if (this.bySeq.has(record.seq)) continue
-      this.bySeq.set(record.seq, record)
+      if (record.seq < this.prefix.length || this.ahead.has(record.seq)) continue
+      this.ahead.set(record.seq, record)
       added++
+    }
+    while (this.ahead.has(this.prefix.length)) {
+      const next = this.ahead.get(this.prefix.length)!
+      this.ahead.delete(next.seq)
+      this.prefix.push(next)
     }
     return added
   }
@@ -34,17 +43,15 @@ export class TraceBuffer {
 
   /** Highest seq such that every seq up to it has arrived; -1 when none. */
   get lastContiguousSeq() {
-    let seq = -1
-    while (this.bySeq.has(seq + 1)) seq++
-    return seq
+    return this.prefix.length - 1
   }
 
   gaps(): Gap[] {
-    const known = [...this.bySeq.keys()].sort((a, b) => a - b)
-    const end = this.finalSeq ?? known.at(-1) ?? -1
+    const ahead = [...this.ahead.keys()].sort((a, b) => a - b)
+    const end = this.finalSeq ?? ahead.at(-1) ?? this.prefix.length - 1
     const gaps: Gap[] = []
-    let expected = 0
-    for (const seq of known) {
+    let expected = this.prefix.length
+    for (const seq of ahead) {
       if (seq > expected) gaps.push({ fromSeq: expected, toSeq: seq - 1 })
       expected = seq + 1
     }
@@ -57,9 +64,12 @@ export class TraceBuffer {
     return this.finalSeq !== null && this.lastContiguousSeq === this.finalSeq
   }
 
+  /** The contiguous prefix as a live, append-only view (no copy). */
+  get records(): readonly TraceRecord[] {
+    return this.prefix
+  }
+
   contiguous(): TraceRecord[] {
-    const result: TraceRecord[] = []
-    for (let seq = 0; this.bySeq.has(seq); seq++) result.push(this.bySeq.get(seq)!)
-    return result
+    return [...this.prefix]
   }
 }

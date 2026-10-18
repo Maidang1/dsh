@@ -12,11 +12,30 @@ export interface Replay {
   snapshot: ViewSnapshot
 }
 
+/**
+ * One replay index per run, extended as batches arrive so a live trace is
+ * folded once rather than rebuilt on every batch. Payloads are read through a
+ * holder because each ingest replaces the payload map.
+ */
+const indexes = new Map<string, { index: ReplayIndex; payloads: { current: RunData['payloads'] } }>()
+
+function indexFor(data: RunData, count: number): ReplayIndex {
+  let entry = indexes.get(data.runId)
+  if (!entry || entry.index.lastSeq >= count) {
+    const payloads = { current: data.payloads }
+    entry = { index: new ReplayIndex([], ref => payloads.current[ref]!, 100), payloads }
+    indexes.set(data.runId, entry)
+  }
+  entry.payloads.current = data.payloads
+  entry.index.extend(data.records.slice(entry.index.lastSeq + 1, count))
+  return entry.index
+}
+
 /** Project the selected run at the replay cursor. Moving the cursor never re-executes anything. */
 export function useReplay(data: RunData | undefined, cursor: number | null): Replay {
   const count = data?.records.length ?? 0
   const index = useMemo(
-    () => (data && count ? new ReplayIndex(data.records, ref => data.payloads[ref]!, 100) : null),
+    () => (data && count ? indexFor(data, count) : null),
     // Records only grow; their count identifies the contents.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data?.runId, count],
@@ -25,7 +44,8 @@ export function useReplay(data: RunData | undefined, cursor: number | null): Rep
   // By default show the scenario's final state, before settlement unloads everything.
   const settleSeq = data?.records.find(record => record.name === 'run/settle')?.seq
   const seq = cursor === null ? (settleSeq !== undefined ? settleSeq - 1 : lastSeq) : Math.min(cursor, lastSeq)
-  const snapshot = useMemo(() => (index && seq >= 0 ? index.at(seq) : emptySnapshot()), [index, seq])
+  // The index object is reused across batches, so `count` keys the projection too.
+  const snapshot = useMemo(() => (index && seq >= 0 ? index.at(seq) : emptySnapshot()), [index, seq, count])
   return { index, lastSeq, seq, snapshot }
 }
 
