@@ -17,7 +17,7 @@
 
 | 任务 | 状态 | 交付 | 验收依据 | 未覆盖 |
 |---|---|---|---|---|
-| P1-01 workspace | 完成 | pnpm workspace、TypeScript strict、Vitest、Playwright、`.github/workflows/ci.yml` | 本地全部检查通过 | CI 工作流尚未在 GitHub 上实际运行 |
+| P1-01 workspace | 完成 | pnpm workspace、TypeScript strict、Vitest、Playwright、`.github/workflows/ci.yml` | 在全新克隆中按 `ci.yml` 的步骤逐条复现通过（含 `lessons:verify-upstream` 克隆上游），`contentVersion` 与开发目录一致 | 工作流只在 `main` 推送与 PR 时触发，尚未在 GitHub 上实际运行 |
 | P1-02 公共协议 | 完成 | `packages/contracts` | `contracts/tests/schemas.spec.ts` | — |
 | P1-03 内容编译器 | 完成 | `packages/lesson-kit`、`scripts/*-lessons.ts` | `lesson-kit/tests/build.spec.ts`（BUILD-01、锚点、`requires` 一致性）、`provides.spec.ts`（`lessons:verify` 按运行中实际提供的服务核对 `provides`） | `provides` 只在课程场景中实际激活的实例上核对 |
 
@@ -56,4 +56,4 @@
 | P7-01 保存与导出 | 完成 | 导出导入、保留策略、容量提示、课程学习进度（阅读位置与已运行阶段） | EXPORT-01、STORE-01、`progress.spec.ts`、`lesson.spec.ts` | — |
 | P7-02 性能与可访问性 | 完成 | `docs/generated/performance.md`；键盘、列表视图、减少动画 | `performance.spec.ts`（回放跳转）、`interaction.spec.ts`（点击反馈、视口稳定） | 数值来自单一云端容器，未在其他机器上记录 |
 | P7-03 文档与来源说明 | 完成 | README、契约、决策记录、本文件 | — | — |
-| P7-04 构建与发布验收 | 部分 | `pnpm build`、`pnpm test:e2e` | 本地通过 | 未在 CI 上验证；生产发布按设计不自动进行 |
+| P7-04 构建与发布验收 | 部分 | `pnpm build`、`pnpm test:e2e` | 本地与全新克隆中通过 | 未在 GitHub Actions 上验证；生产发布按设计不自动进行 |
