@@ -3,7 +3,7 @@ import { Composition } from '@harness-explorer/contracts'
 import { devStages } from '@harness-explorer/teaching-plugins'
 import { describe, expect, it } from 'vitest'
 import minimalChat from '../../../fixtures/compositions/minimal-chat.json' with { type: 'json' }
-import { instancesFor, planAddition } from '../src/lib/library'
+import { affectedConsumers, instancesFor, planAddition } from '../src/lib/library'
 import type { PublicStage } from '../src/lib/api'
 
 const stages: PublicStage[] = devStages.map(({ module: _module, ...stage }) => stage)
@@ -40,5 +40,19 @@ describe('plugin library', () => {
     expect(existing.map(item => item.id)).toEqual(['calculator', 'calculator-2'])
     const more = instancesFor([stage('calculator@main')], [...composition.instances, existing[1]!])
     expect(more.map(item => item.id)).toEqual(['calculator'])
+  })
+
+  it('lists consumers that lose their only provider on removal', () => {
+    expect(affectedConsumers(stages, composition.instances, 'system-prompt')).toEqual([
+      { instanceId: 'tools', services: ['systemPrompt'] },
+      { instanceId: 'agent-loop', services: ['systemPrompt'] },
+      { instanceId: 'prompt-contributor', services: ['systemPrompt'] },
+    ])
+    expect(affectedConsumers(stages, composition.instances, 'agent-loop')).toEqual([])
+  })
+
+  it('does not list consumers another instance still serves', () => {
+    const second = instancesFor([stage('tools@main')], composition.instances)
+    expect(affectedConsumers(stages, [...composition.instances, ...second], 'tools')).toEqual([])
   })
 })

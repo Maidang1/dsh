@@ -62,3 +62,26 @@ export function instancesFor(stages: readonly PublicStage[], existing: readonly 
     return { id, definitionId: stage.pluginDefinitionId, stageId: stage.id, scopeId: 'root', parentId: null, enabled: true, config: {} }
   })
 }
+
+export interface AffectedConsumer {
+  instanceId: string
+  /** Services the consumer requires that only the removed instance provides. */
+  services: string[]
+}
+
+/**
+ * Consumers that lose a provider when `instanceId` leaves the composition
+ * (docs/01 §5.2). Whether they wait or stop is the runner's to report.
+ */
+export function affectedConsumers(stages: readonly PublicStage[], instances: readonly PluginInstance[], instanceId: string): AffectedConsumer[] {
+  const byId = new Map(stages.map(item => [item.id, item]))
+  const removed = instances.find(instance => instance.id === instanceId)
+  if (!removed) return []
+  const remaining = instances.filter(instance => instance.id !== instanceId)
+  const stillProvided = new Set(remaining.flatMap(instance => byId.get(instance.stageId)?.provides ?? []))
+  const lost = (byId.get(removed.stageId)?.provides ?? []).filter(service => !stillProvided.has(service))
+  return remaining.flatMap(instance => {
+    const services = (byId.get(instance.stageId)?.requires ?? []).filter(service => lost.includes(service))
+    return services.length ? [{ instanceId: instance.id, services }] : []
+  })
+}

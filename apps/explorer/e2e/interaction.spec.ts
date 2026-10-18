@@ -58,7 +58,8 @@ test('adding a plugin keeps the viewport', async ({ page }) => {
 
   // Leave the draft as the other specs expect it.
   await added.click()
-  await page.getByRole('button', { name: '从组合中移除' }).click()
+  await page.getByRole('button', { name: '从组合中移除…' }).click()
+  await page.getByRole('button', { name: '确认移除' }).click()
   await expect(added).toHaveCount(0)
 })
 
@@ -67,7 +68,10 @@ test('adds a plugin together with the providers of its missing services', async 
   await page.goto('/')
   const node = (name: string) => page.locator(`.react-flow__node[data-id="${name}"]`)
   await node('tools').click()
-  await page.getByRole('button', { name: '从组合中移除' }).click()
+  await page.getByRole('button', { name: '从组合中移除…' }).click()
+  const confirm = page.getByRole('group', { name: '确认从组合中移除' })
+  await expect(confirm).toContainText('受影响的消费者：agent-loop（需要 tools）')
+  await page.getByRole('button', { name: '确认移除' }).click()
   await expect(node('tools')).toHaveCount(0)
 
   await page.getByRole('button', { name: '添加插件' }).click()

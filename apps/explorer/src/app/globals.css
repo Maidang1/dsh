@@ -49,6 +49,9 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 .checkbox { gap: 4px; }
 .muted { color: var(--muted); }
 .error-text { color: var(--error); }
+.danger { color: var(--error); border-color: var(--error); }
+.remove-confirm { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--error); border-radius: 6px; }
+.remove-confirm p { margin: 0; }
 .warning-text { color: var(--warn); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .badge { border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; font-size: 12px; }

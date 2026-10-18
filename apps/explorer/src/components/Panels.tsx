@@ -3,12 +3,13 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { TimelineRows } from './TimelineRows'
 import type { AdapterMode, EnvironmentSnapshot, PluginInstance, PluginResponsibility, RuntimeState } from '@harness-explorer/contracts'
-import type { ViewSnapshot } from '@harness-explorer/trace/browser'
+import type { ViewRegistration, ViewSnapshot } from '@harness-explorer/trace/browser'
 import type { Draft, LessonsResponse, PublicCatalog, PublicStage } from '@/lib/api'
 import type { RunData } from '@/lib/store'
 import { PHASE_LABEL, phaseOf } from './PluginTree'
 import type { PhaseChange } from '@/lib/replay'
 import { latestStages, planAddition } from '@/lib/library'
+import type { AffectedConsumer } from '@/lib/library'
 
 const PHASE_TEXT: Record<RuntimeState['phase'], string> = {
   idle: '空闲',
@@ -88,6 +89,8 @@ interface InspectorProps {
   lessons: LessonsResponse | null
   editable: boolean
   stagesOfDefinition: PublicStage[]
+  /** Consumers that would lose a provider if this instance were removed from the draft. */
+  consumers: AffectedConsumer[]
   onRemove(id: string): void
   onStage(id: string, stageId: string): void
   onEnabled(id: string, enabled: boolean): void
@@ -96,7 +99,34 @@ interface InspectorProps {
   onCursor(seq: number): void
 }
 
-export function Inspector({ instance, stage, snapshot, lessons, editable, stagesOfDefinition, onRemove, onStage, onEnabled, history, seq, onCursor }: InspectorProps) {
+/**
+ * Removing from the composition lists who is affected before it edits the
+ * draft (docs/01 §5.2). It is not the scenario's unmount step: the next run
+ * never loads the instance, so it shows no cleanup.
+ */
+function RemoveControl({ instanceId, consumers, registrations, onRemove }: {
+  instanceId: string
+  consumers: AffectedConsumer[]
+  registrations: ViewRegistration[]
+  onRemove(id: string): void
+}) {
+  const [confirming, setConfirming] = useState(false)
+  if (!confirming) return <button type="button" onClick={() => setConfirming(true)}>从组合中移除…</button>
+  return (
+    <div className="remove-confirm" role="group" aria-label="确认从组合中移除">
+      <p><strong>从组合中移除 {instanceId}</strong></p>
+      <p>受影响的消费者：{consumers.length
+        ? consumers.map(item => `${item.instanceId}（需要 ${item.services.join('、')}）`).join('；')
+        : '无（没有实例只依赖它提供的服务）'}</p>
+      <p>回放位置上它的注册项：{registrations.length ? registrations.map(item => `${item.kind} · ${item.name}`).join('；') : '无'}</p>
+      <p className="muted">新运行里它从未加载，只能与旧运行对比结果；消费者会等待还是停用以运行器报告为准。要观察清理过程，请运行包含卸载步骤的场景。历史运行保留可回放。</p>
+      <button type="button" className="danger" onClick={() => onRemove(instanceId)}>确认移除</button>
+      <button type="button" onClick={() => setConfirming(false)}>取消</button>
+    </div>
+  )
+}
+
+export function Inspector({ instance, stage, snapshot, lessons, editable, stagesOfDefinition, consumers, onRemove, onStage, onEnabled, history, seq, onCursor }: InspectorProps) {
   if (!instance) return <aside className="inspector"><p className="muted">选择插件树中的一个实例查看状态与依赖。</p></aside>
   const plugin = snapshot.plugins[instance.id]
   const phase = phaseOf(plugin)
@@ -151,7 +181,7 @@ export function Inspector({ instance, stage, snapshot, lessons, editable, stages
             <input type="checkbox" checked={instance.enabled} onChange={event => onEnabled(instance.id, event.target.checked)} />
             运行开始时挂载（否则由场景步骤挂载）
           </label>
-          <button type="button" onClick={() => onRemove(instance.id)}>从组合中移除</button>
+          <RemoveControl key={instance.id} instanceId={instance.id} consumers={consumers} registrations={registrations} onRemove={onRemove} />
           <p className="muted">修改只影响草稿；下次运行会生成新的实验版本，历史运行保持不变。</p>
         </div>
       ) : <p className="muted">正在查看历史运行绑定的版本，返回草稿后才能编辑。</p>}
