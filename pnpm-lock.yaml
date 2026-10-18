@@ -39,6 +39,12 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/trace:
+    dependencies:
+      '@harness-explorer/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
 packages:
 
   '@deepseek-ai/cordis@4.0.5':
