@@ -64,7 +64,7 @@ docs                   设计文档、契约与技术决定
 
 ## 文档
 
-从 [文档总览](docs/README.md) 开始；行为契约及其测试见 [docs/contracts](docs/contracts/README.md)，技术决定见 [docs/decisions](docs/decisions/0001-upstream-baseline-and-reuse.md)。
+从 [文档总览](docs/README.md) 开始；各任务的完成情况见 [实施状态索引](docs/generated/implementation-status.md)，行为契约及其测试见 [docs/contracts](docs/contracts/README.md)，技术决定见 [docs/decisions](docs/decisions/0001-upstream-baseline-and-reuse.md)。
 
 1. [产品设计与范围](docs/01-product-design.md)
 2. [系统架构与状态数据模型](docs/02-technical-architecture.md)
