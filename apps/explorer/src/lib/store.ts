@@ -213,7 +213,10 @@ export const useExplorer = create<ExplorerState>((set, get) => {
             void get().refreshRuns().catch(() => {})
           }
         })
-        const latest = runtime.runId ?? runs[0]?.runId ?? null
+        // Moving between the workbench and a lesson keeps the selected run (docs/01 §3.2);
+        // a fresh page starts from the current or latest run.
+        const kept = get().selectedRunId
+        const latest = (kept && runs.some(run => run.runId === kept) ? kept : null) ?? runtime.runId ?? runs[0]?.runId ?? null
         if (latest) await get().selectRun(latest)
       } catch (error) {
         set({ error: describeFailure('load', error) })

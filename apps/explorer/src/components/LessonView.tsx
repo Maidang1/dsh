@@ -83,10 +83,13 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
   const stage = view.stage
   const file = view.files.find(item => item.key === fileKey) ?? view.files[0]!
 
-  // The selected run counts as this stage's run only if its revision ran this stage's code.
+  // The selected run counts as this stage's run only if it ran this stage with the code shown:
+  // same stage id and, from its manifest, the same sourceHash (docs/02 §11).
   const selected = state.selectedRunId ? state.runData[state.selectedRunId] : undefined
   const runStage = selected?.revision?.composition.instances.find(instance => instance.definitionId === lesson.pluginDefinitionId)?.stageId
-  const runMatches = runStage === stage.codeStageId
+  const ranHash = state.runs.find(run => run.runId === selected?.runId)?.loadedSourceHashes[stage.codeStageId]
+  const otherCode = runStage === stage.codeStageId && ranHash !== stage.sourceHash
+  const runMatches = runStage === stage.codeStageId && !otherCode
   const replay = useReplay(runMatches ? selected : undefined, null)
   const busy = state.runtime !== null && state.runtime.phase !== 'idle'
   const completedStages = useMemo(() => new Set(lessonProgress?.completed.map(item => item.stageId)), [lessonProgress])
@@ -134,7 +137,7 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
         <h1>{lesson.title}</h1>
         <span className="muted">阶段 {index + 1}/{views.length} · {stage.title}</span>
         <span className="badge" aria-label="对应运行">
-          {!selected ? '尚无运行' : runMatches ? `运行 ${selected.runId} · 回放 #${replay.seq}（场景结束时）` : `所选运行 ${selected.runId} 未执行此阶段`}
+          {!selected ? '尚无运行' : runMatches ? `运行 ${selected.runId} · 回放 #${replay.seq}（场景结束时）` : otherCode ? `所选运行 ${selected.runId} 执行的是此阶段的另一版代码` : `所选运行 ${selected.runId} 未执行此阶段`}
         </span>
         {stage.kind === 'executable' ? (
           <button
@@ -226,7 +229,11 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
 
           {tab === 'state' ? (
             <div className="stage-state">
-              {!selected ? <p className="muted">当前阶段尚未运行。点击“运行此阶段”。</p> : !runMatches ? (
+              {!selected ? <p className="muted">当前阶段尚未运行。点击“运行此阶段”。</p> : otherCode ? (
+                <p className="warning-text">
+                  所选运行 {selected.runId} 执行的 {stage.codeStageId} 来自另一版代码（sourceHash {ranHash?.slice(7, 19) ?? '未知'}，当前展示 {stage.sourceHash.slice(7, 19)}），它的结果不对应到当前代码。可在整体组合中只读回放它；运行此阶段以查看当前代码的结果。
+                </p>
+              ) : !runMatches ? (
                 <p className="warning-text">所选运行 {selected.runId} 执行的是 {runStage ?? '（无此插件）'}，与当前阅读阶段 {stage.codeStageId} 不同。运行此阶段以查看它的结果。</p>
               ) : (
                 <>

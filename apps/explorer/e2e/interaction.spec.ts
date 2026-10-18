@@ -212,3 +212,37 @@ test('an added tool is declared, called, and its result reaches the next request
     if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
   }
 })
+
+test('a lesson does not attribute a run of other code to the code it shows', async ({ page }) => {
+  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
+  await page.goto('/')
+  await page.getByRole('button', { name: '运行教学代码' }).click()
+  await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
+  const runId = await page.getByLabel('查看运行').inputValue()
+  const origin = { origin: new URL(page.url()).origin }
+
+  // The same stage id, recorded with another sourceHash: what an older build or another repository would export.
+  const bundle = await page.request.get(`/api/runs/${runId}/export`).then(response => response.json())
+  const copyId = `${runId}-old`
+  bundle.manifest.runId = copyId
+  bundle.manifest.startedAt = new Date(Date.now() + 1000).toISOString()
+  bundle.manifest.loadedSourceHashes['prompt-contributor@02-section'] = `sha256:${'0'.repeat(64)}`
+  for (const record of bundle.records) record.runId = copyId
+  expect((await page.request.post('/api/imports', { data: bundle, headers: origin })).ok()).toBe(true)
+
+  // Select the imported run in the workbench and enter the lesson in-app: the selection carries over.
+  await page.reload()
+  await page.getByLabel('查看运行').selectOption(copyId)
+  await page.locator('.react-flow__node[data-id="prompt-contributor"]').click()
+  await page.getByRole('link', { name: '进入插件实现' }).click()
+  await page.getByRole('button', { name: '02-section' }).click()
+  await expect(page.getByLabel('对应运行')).toHaveText(`所选运行 ${copyId} 执行的是此阶段的另一版代码`)
+  await page.getByRole('tab', { name: '状态与数据' }).click()
+  await expect(page.locator('.stage-state')).toContainText('sourceHash 000000000000')
+  await expect(page.locator('.stage-state__requests')).toHaveCount(0)
+
+  await page.request.put('/api/lessons/prompt-contributor/progress', { data: { lastStageId: '00-entry' }, headers: origin })
+  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
+    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
+  }
+})
