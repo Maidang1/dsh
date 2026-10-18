@@ -220,7 +220,7 @@ export function Inspector({ instance, stage, snapshot, lessons, editable, stages
       {registrations.length
         ? <ul>{registrations.map(item => <li key={item.registrationId}>{item.kind} · {item.name}（作用域 {item.scopeId}）</li>)}</ul>
         : <p className="muted">回放位置上没有注册项。</p>}
-      {lesson ? <p><Link className="button primary" href={lessonHref(lesson.id, instance)}>进入插件实现</Link></p> : null}
+      {lesson ? <p><Link className="button primary" href={`/plugin/${lesson.id}?instance=${encodeURIComponent(instance.id)}`}>进入插件实现</Link></p> : null}
       {editable ? (
         <div className="inspector__edit">
           <h3>编辑草稿</h3>
@@ -321,7 +321,10 @@ interface TimelineProps {
   onSelectInstance(id: string): void
 }
 
-/** Link to a lesson opened at the stage an instance ran, so the code shown is the code that ran. */
+/**
+ * Link to a lesson opened at the stage an instance ran, so the code shown is
+ * the code that ran. Entering from the tree keeps the learner's reading position instead.
+ */
 export const lessonHref = (lessonId: string, instance: PluginInstance) =>
   `/plugin/${lessonId}?instance=${encodeURIComponent(instance.id)}&stage=${encodeURIComponent(instance.stageId)}`
 

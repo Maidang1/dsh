@@ -158,7 +158,11 @@ test('a trace record leads to its instance and the code of the stage that ran', 
   await current.getByRole('link', { name: '查看该阶段代码' }).click()
   await expect(page.getByText(/^阶段 \d\/\d · 注册提示词片段$/)).toBeVisible()
 
+  // Opening the lesson saved this stage as the reading position; the lesson spec starts from the beginning.
+  const origin = { origin: new URL(page.url()).origin }
+  await page.request.put('/api/lessons/prompt-contributor/progress', { data: { lastStageId: '00-entry' }, headers: origin })
+
   for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
-    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: { origin: new URL(page.url()).origin } })
+    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
   }
 })

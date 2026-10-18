@@ -96,9 +96,27 @@ export class RunStore {
     return join(this.root, ...parts)
   }
 
+  private tempCounter = 0
+  private readonly locks = new Map<string, Promise<unknown>>()
+
+  /**
+   * Run read-check-write sequences on one file one at a time; without this two
+   * requests could both pass a version check, or one could drop the other's update.
+   */
+  private exclusive<T>(key: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.locks.get(key) ?? Promise.resolve()
+    const next = previous.catch(() => {}).then(task)
+    this.locks.set(key, next)
+    void next.catch(() => {}).finally(() => {
+      if (this.locks.get(key) === next) this.locks.delete(key)
+    })
+    return next
+  }
+
   private async writeJson(path: string, value: unknown) {
     await mkdir(join(path, '..'), { recursive: true })
-    const temp = `${path}.${process.pid}.tmp`
+    // Unique per write: concurrent writes of one file must not share a temp file.
+    const temp = `${path}.${process.pid}.${++this.tempCounter}.tmp`
     await writeFile(temp, JSON.stringify(value, null, 2) + '\n')
     await rename(temp, path)
   }
@@ -115,16 +133,18 @@ export class RunStore {
   }
 
   /** Optimistic concurrency: the caller states the version it edited. */
-  async saveDraft(draft: Omit<Draft, 'version'>, expectedVersion: number | null): Promise<Draft> {
+  saveDraft(draft: Omit<Draft, 'version'>, expectedVersion: number | null): Promise<Draft> {
     const path = this.path('drafts', `${safeName(draft.id)}.json`)
-    const current = existsSync(path) ? await this.getDraft(draft.id) : null
-    const currentVersion = current?.version ?? null
-    if (currentVersion !== expectedVersion) {
-      throw new ConflictError(`draft "${draft.id}" is at version ${currentVersion ?? 'none'}, not ${expectedVersion ?? 'none'}`)
-    }
-    const saved = Draft.parse({ ...draft, version: (currentVersion ?? 0) + 1 })
-    await this.writeJson(path, saved)
-    return saved
+    return this.exclusive(path, async () => {
+      const current = existsSync(path) ? await this.getDraft(draft.id) : null
+      const currentVersion = current?.version ?? null
+      if (currentVersion !== expectedVersion) {
+        throw new ConflictError(`draft "${draft.id}" is at version ${currentVersion ?? 'none'}, not ${expectedVersion ?? 'none'}`)
+      }
+      const saved = Draft.parse({ ...draft, version: (currentVersion ?? 0) + 1 })
+      await this.writeJson(path, saved)
+      return saved
+    })
   }
 
   // Revisions ---------------------------------------------------------------
@@ -336,10 +356,12 @@ export class RunStore {
   /** Pinned runs are never removed by automatic retention. */
   async setPinned(runId: string, pinned: boolean) {
     await this.getManifest(runId)
-    const pins = await this.pinnedRuns()
-    if (pinned) pins.add(runId)
-    else pins.delete(runId)
-    await this.writeJson(this.path('pins.json'), [...pins].sort())
+    await this.exclusive('pins', async () => {
+      const pins = await this.pinnedRuns()
+      if (pinned) pins.add(runId)
+      else pins.delete(runId)
+      await this.writeJson(this.path('pins.json'), [...pins].sort())
+    })
   }
 
   async usage(): Promise<StoreUsage> {
@@ -362,7 +384,12 @@ export class RunStore {
     await this.getManifest(runId)
     await rm(this.path('runs', safeName(runId)), { recursive: true, force: true })
     const pins = await this.pinnedRuns()
-    if (pins.delete(runId)) await this.writeJson(this.path('pins.json'), [...pins].sort())
+    if (pins.has(runId)) {
+      await this.exclusive('pins', async () => {
+        const current = await this.pinnedRuns()
+        if (current.delete(runId)) await this.writeJson(this.path('pins.json'), [...current].sort())
+      })
+    }
   }
 
   /** Remove payloads no remaining run trace refers to. Unsafe while a run is being written. */
@@ -416,7 +443,11 @@ export class RunStore {
   }
 
   /** Merge one lesson's progress; completions are kept once per stage with the run that proved them. */
-  async updateLessonProgress(lessonId: string, update: LessonProgressUpdate): Promise<LearningProgress> {
+  updateLessonProgress(lessonId: string, update: LessonProgressUpdate): Promise<LearningProgress> {
+    return this.exclusive('progress', () => this.applyLessonProgress(lessonId, update))
+  }
+
+  private async applyLessonProgress(lessonId: string, update: LessonProgressUpdate): Promise<LearningProgress> {
     const progress = await this.getLearningProgress()
     const lesson = progress.lessons[lessonId] ?? { lastStageId: null, completed: [] }
     if (update.lastStageId !== undefined) lesson.lastStageId = update.lastStageId

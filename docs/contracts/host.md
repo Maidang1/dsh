@@ -23,7 +23,8 @@
 ### STORE-01 容量管理
 
 - 期望：统计运行数、记录数与字节数；删除运行后只清理不再被任何运行引用的 payload；结算后按运行数与字节数双重上限自动删除最旧的已结算运行，保留的运行、未结算的运行和刚结算的运行不被删除；有运行进行时拒绝删除，避免与写入竞争。
-- 验证：`apps/local-server/tests/retention.spec.ts`、`apps/explorer/e2e/workbench.spec.ts`「pins and deletes runs」。状态：verified。
+- 并发：同一文件的读改写串行执行，两个基于同一版本的草稿保存只有一个成功，并发的学习进度与保留设置更新互不覆盖；每次写入使用独立的临时文件。
+- 验证：`apps/local-server/tests/retention.spec.ts`、`progress.spec.ts`（并发）、`apps/explorer/e2e/workbench.spec.ts`「pins and deletes runs」。状态：verified。
 
 ### HOST-01 刷新与重连
 
