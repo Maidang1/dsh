@@ -79,6 +79,18 @@ test('offers the real model only when the key is configured', async () => {
   await expect(real).toContainText('DEEPSEEK_API_KEY')
 })
 
+test('pins and deletes runs and shows the storage usage', async () => {
+  await expect(page.getByText(/运行记录 \d+ 个/)).toBeVisible()
+  await page.getByLabel('保留').check()
+  await expect.poll(async () => (await page.request.get('/api/storage').then(response => response.json())).pinned.length).toBe(1)
+  await page.getByLabel('保留').uncheck()
+  const before = (await page.request.get('/api/runs').then(response => response.json())).length
+  page.once('dialog', dialog => void dialog.accept())
+  await page.getByRole('button', { name: '删除运行' }).click()
+  await expect.poll(async () => (await page.request.get('/api/runs').then(response => response.json())).length).toBe(before - 1)
+  await expect(page.getByLabel('查看运行')).toHaveValue('')
+})
+
 test('rejects visitors without the launch token', async ({ browser }) => {
   const context = await browser.newContext({ storageState: undefined })
   const response = await (await context.newPage()).goto('/api/state')

@@ -28,7 +28,7 @@ import type { Catalog } from './catalog.ts'
 import { captureEnvironment, redactText, RUN_VARIABLES, secretValues } from './environment.ts'
 import { ChildMessage } from './ipc.ts'
 import type { StartMessage } from './ipc.ts'
-import type { RunStore } from './store.ts'
+import type { RetentionPolicy, RunStore } from './store.ts'
 
 type ControlEvent =
   | { type: 'RUN' }
@@ -76,6 +76,8 @@ export interface ControllerOptions {
   cleanupTimeoutMs?: number
   limits?: StartMessage['limits']
   env?: NodeJS.ProcessEnv
+  /** Applied after each run settles; pinned runs and the run just settled are kept. */
+  retention?: RetentionPolicy
 }
 
 interface ActiveRun {
@@ -354,6 +356,14 @@ export class RunController {
     }
     this.error ??= settled.error
     run.finished = { finalSeq, outcome: settled.outcome }
+    // No run is writing between settlement and the next RUN, so payload collection is safe here.
+    if (this.options.retention) {
+      try {
+        await this.options.store.enforceRetention(this.options.retention, [run.runId])
+      } catch (error) {
+        this.error ??= { name: 'StoreError', message: `retention failed: ${error instanceof Error ? error.message : String(error)}`, sourceRefIds: [] }
+      }
+    }
     this.transition({ type: 'SETTLED' })
     this.emit({ type: 'settled', runId: run.runId, finalSeq, outcome: settled.outcome })
     run.resolveDone()

@@ -16,6 +16,7 @@ import type { ControllerEvent, RunController } from './controller.ts'
 import { captureEnvironment } from './environment.ts'
 import { commitDraft } from './experiments.ts'
 import { ConflictError, Draft, InvalidBundleError, NotFoundError } from './store.ts'
+import type { RetentionPolicy } from './store.ts'
 import type { RunStore } from './store.ts'
 
 export interface ServerOptions {
@@ -24,6 +25,8 @@ export interface ServerOptions {
   controller: RunController
   port?: number
   staticDir?: string
+  /** Retention limits reported to the UI; enforcement lives in the controller. */
+  retention?: RetentionPolicy
   /** Environment the runs see; defaults to process.env. */
   env?: NodeJS.ProcessEnv
   /** Fixed launch token for automated browser tests; random when omitted. */
@@ -48,6 +51,7 @@ class HttpError extends Error {
 }
 
 const RunBody = z.object({ revisionId: z.string().min(1), adapterMode: AdapterMode })
+const PinBody = z.object({ pinned: z.boolean() })
 const DraftBody = z.object({ expectedVersion: z.number().int().nonnegative().nullable(), draft: Draft.omit({ version: true }) })
 
 const MIME: Record<string, string> = {
@@ -251,6 +255,19 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
         const fromSeq = Number(url.searchParams.get('fromSeq') ?? 0)
         const records = await store.readTrace(parts[1]!, Number.isInteger(fromSeq) && fromSeq > 0 ? fromSeq : 0)
         return sendJson(response, 200, { records, payloads: await storedPayloads(records) })
+      }
+      case 'GET /storage':
+        return sendJson(response, 200, { ...await store.usage(), retention: options.retention ?? null })
+      case 'DELETE /runs/:id': {
+        // Payload collection must not race a run that is writing.
+        if (controller.phase !== 'idle') throw new HttpError(409, 'wait for the current run to settle before deleting runs')
+        await store.deleteRun(parts[1]!)
+        return sendJson(response, 200, { deleted: parts[1], payloadsRemoved: await store.collectGarbage() })
+      }
+      case 'PUT /runs/:id/pin': {
+        const { pinned } = PinBody.parse(await readBody(request))
+        await store.setPinned(parts[1]!, pinned)
+        return sendJson(response, 200, { runId: parts[1], pinned })
       }
       case 'GET /runs/:id/export': {
         const bundle = await store.exportRun(parts[1]!)

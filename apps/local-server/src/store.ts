@@ -3,7 +3,7 @@
  * The control service is its only writer; persistence never depends on a
  * browser being open.
  */
-import { appendFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { Composition, EnvironmentSnapshot, ExperimentRevision, JsonValue as JsonValueSchema, RunManifest, Scenario, TraceRecord } from '@harness-explorer/contracts'
@@ -36,6 +36,20 @@ export const RunBundle = z.object({
   payloads: z.record(z.string(), JsonValueSchema),
 })
 export type RunBundle = z.infer<typeof RunBundle>
+
+export interface StoreUsage {
+  runs: number
+  records: number
+  bytes: number
+  pinned: string[]
+}
+
+export interface RetentionPolicy {
+  maxRuns: number
+  maxBytes: number
+}
+
+export const DEFAULT_RETENTION: RetentionPolicy = { maxRuns: 200, maxBytes: 512 * 1024 * 1024 }
 
 export class InvalidBundleError extends Error {
   override name = 'InvalidBundleError'
@@ -280,6 +294,97 @@ export class RunStore {
     if (bundle.scenario) await this.saveRunScenario(manifest.runId, bundle.scenario)
     await this.appendTrace(manifest.runId, records, new Map(Object.entries(bundle.payloads)))
     return stored
+  }
+
+  // Capacity ------------------------------------------------------------------
+
+  private async dirBytes(dir: string): Promise<number> {
+    if (!existsSync(dir)) return 0
+    let total = 0
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name)
+      total += entry.isDirectory() ? await this.dirBytes(path) : (await stat(path)).size
+    }
+    return total
+  }
+
+  async pinnedRuns(): Promise<Set<string>> {
+    const path = this.path('pins.json')
+    return new Set(existsSync(path) ? z.array(z.string()).parse(JSON.parse(await readFile(path, 'utf8'))) : [])
+  }
+
+  /** Pinned runs are never removed by automatic retention. */
+  async setPinned(runId: string, pinned: boolean) {
+    await this.getManifest(runId)
+    const pins = await this.pinnedRuns()
+    if (pinned) pins.add(runId)
+    else pins.delete(runId)
+    await this.writeJson(this.path('pins.json'), [...pins].sort())
+  }
+
+  async usage(): Promise<StoreUsage> {
+    const runs = await this.listRuns()
+    const runBytes = await this.dirBytes(this.path('runs'))
+    const payloadBytes = await this.dirBytes(this.path('payloads'))
+    return {
+      runs: runs.length,
+      records: runs.reduce((total, run) => total + Math.max(run.lastSeq + 1, 0), 0),
+      bytes: runBytes + payloadBytes,
+      pinned: [...await this.pinnedRuns()].filter(runId => runs.some(run => run.runId === runId)),
+    }
+  }
+
+  /**
+   * Delete one run. Payloads it alone referenced are removed by
+   * collectGarbage, which the caller runs while no run is writing.
+   */
+  async deleteRun(runId: string) {
+    await this.getManifest(runId)
+    await rm(this.path('runs', safeName(runId)), { recursive: true, force: true })
+    const pins = await this.pinnedRuns()
+    if (pins.delete(runId)) await this.writeJson(this.path('pins.json'), [...pins].sort())
+  }
+
+  /** Remove payloads no remaining run trace refers to. Unsafe while a run is being written. */
+  async collectGarbage(): Promise<number> {
+    const dir = this.path('payloads')
+    if (!existsSync(dir)) return 0
+    const referenced = new Set<string>()
+    for (const run of await this.listRuns()) {
+      for (const record of await this.readTrace(run.runId)) {
+        for (const ref of [record.payloadRef, record.beforeRef, record.afterRef]) if (ref) referenced.add(`${safeName(ref)}.json`)
+      }
+    }
+    let removed = 0
+    for (const name of await readdir(dir)) {
+      if (name.endsWith('.json') && !referenced.has(name)) {
+        await rm(join(dir, name), { force: true })
+        removed++
+      }
+    }
+    return removed
+  }
+
+  /**
+   * Keep the store within both limits by deleting the oldest settled,
+   * unpinned runs. Runs still marked running, pinned runs and `protect` are kept.
+   */
+  async enforceRetention(policy: RetentionPolicy, protect: readonly string[] = []): Promise<string[]> {
+    const pins = await this.pinnedRuns()
+    const deleted: string[] = []
+    const candidates = (await this.listRuns())
+      .filter(run => run.outcome !== 'running' && !pins.has(run.runId) && !protect.includes(run.runId))
+      .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+    let usage = await this.usage()
+    while (candidates.length && (usage.runs > policy.maxRuns || usage.bytes > policy.maxBytes)) {
+      const oldest = candidates.shift()!
+      await this.deleteRun(oldest.runId)
+      deleted.push(oldest.runId)
+      if (usage.bytes > policy.maxBytes) await this.collectGarbage()
+      usage = await this.usage()
+    }
+    if (deleted.length) await this.collectGarbage()
+    return deleted
   }
 
   // Progress ------------------------------------------------------------------

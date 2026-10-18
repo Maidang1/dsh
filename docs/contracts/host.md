@@ -20,6 +20,11 @@
 - 期望：导出包含 manifest、revision、场景、脱敏环境、轨迹与 payload；导入到另一仓库后可回放；篡改的 payload、revision、序号缺口、外来记录和缺失 payload 被拒绝；未结算运行导入为 interrupted；不覆盖已有运行；导入不执行代码。
 - 验证：`apps/local-server/tests/export.spec.ts`、`apps/explorer/e2e/workbench.spec.ts`。状态：verified。
 
+### STORE-01 容量管理
+
+- 期望：统计运行数、记录数与字节数；删除运行后只清理不再被任何运行引用的 payload；结算后按运行数与字节数双重上限自动删除最旧的已结算运行，保留的运行、未结算的运行和刚结算的运行不被删除；有运行进行时拒绝删除，避免与写入竞争。
+- 验证：`apps/local-server/tests/retention.spec.ts`、`apps/explorer/e2e/workbench.spec.ts`「pins and deletes runs」。状态：verified。
+
 ### HOST-01 刷新与重连
 
 - 期望：重连不重新执行场景；按 Last-Event-ID 只补发缺失记录；缺口显式标记。

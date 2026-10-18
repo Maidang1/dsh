@@ -9,6 +9,22 @@ import { RequestDiff } from './RequestDiff'
 
 type BottomTab = 'timeline' | 'diff'
 
+function megabytes(bytes: number) {
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+/** Capacity hint (docs/02 §13): usage against the retention limits. */
+function StorageNote({ storage }: { storage: NonNullable<ReturnType<typeof useExplorer.getState>['storage']> }) {
+  const limits = storage.retention
+  const nearLimit = limits !== null && (storage.runs >= limits.maxRuns * 0.8 || storage.bytes >= limits.maxBytes * 0.8)
+  return (
+    <span className={nearLimit ? 'warning-text' : 'muted'}>
+      运行记录 {storage.runs} 个 · {megabytes(storage.bytes)}
+      {limits ? `（上限 ${limits.maxRuns} 个 / ${megabytes(limits.maxBytes)}${nearLimit ? '，接近上限：结算后会自动删除最旧的未保留运行' : ''}）` : ''}
+    </span>
+  )
+}
+
 export function Workbench() {
   const state = useExplorer()
   const [tab, setTab] = useState<BottomTab>('timeline')
@@ -69,7 +85,29 @@ export function Workbench() {
             {state.runs.map(run => <option key={run.runId} value={run.runId}>{run.runId} · {outcomeText(run.outcome)}</option>)}
           </select>
         </label>
-        {state.selectedRunId ? <a className="button" href={`/api/runs/${encodeURIComponent(state.selectedRunId)}/export`} download>导出运行</a> : null}
+        {state.selectedRunId ? (
+          <>
+            <a className="button" href={`/api/runs/${encodeURIComponent(state.selectedRunId)}/export`} download>导出运行</a>
+            <label className="checkbox" title="保留的运行不会被自动清理">
+              <input
+                type="checkbox"
+                checked={state.storage?.pinned.includes(state.selectedRunId) ?? false}
+                onChange={event => void state.pinRun(state.selectedRunId!, event.target.checked)}
+              />
+              保留
+            </label>
+            <button
+              type="button"
+              disabled={state.runtime?.phase !== 'idle'}
+              onClick={() => {
+                if (window.confirm(`删除运行 ${state.selectedRunId}？删除后无法回放。`)) void state.deleteRun(state.selectedRunId!)
+              }}
+            >
+              删除运行
+            </button>
+          </>
+        ) : null}
+        {state.storage ? <StorageNote storage={state.storage} /> : null}
         <label className="button">
           导入运行
           <input

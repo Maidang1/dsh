@@ -18,7 +18,7 @@ import type {
 } from '@harness-explorer/contracts'
 import { TraceBuffer } from '@harness-explorer/trace/browser'
 import { api, ApiError, subscribeRun } from './api'
-import type { Draft, LessonsResponse, PublicCatalog } from './api'
+import type { Draft, LessonsResponse, PublicCatalog, StorageUsage } from './api'
 
 export const DRAFT_ID = 'main'
 const DEFAULT_COMPOSITION = 'minimal-chat'
@@ -54,6 +54,7 @@ interface ExplorerState {
   listView: boolean
   adapterMode: AdapterMode
   environment: Record<AdapterMode, EnvironmentSnapshot> | null
+  storage: StorageUsage | null
 
   init(): Promise<void>
   selectRun(runId: string | null): Promise<void>
@@ -72,6 +73,9 @@ interface ExplorerState {
    */
   runLessonStage(lessonId: string, definitionId: string, stageId: string, scenarioId: string): Promise<void>
   cancel(): Promise<void>
+  refreshRuns(): Promise<void>
+  deleteRun(runId: string): Promise<void>
+  pinRun(runId: string, pinned: boolean): Promise<void>
   /** Import an exported run; it is stored as data and selected, never executed. */
   importRun(file: File): Promise<void>
   dismissError(): void
@@ -139,7 +143,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         onTrace: (records, payloads) => ingest(runId, records, payloads),
         onSettled: (settled) => {
           settle(runId, settled)
-          void api.runs().then(runs => set({ runs }))
+          void get().refreshRuns()
         },
         onConnection: connected => set({ connected }),
       })
@@ -169,6 +173,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     listView: false,
     adapterMode: 'deterministic',
     environment: null,
+    storage: null,
 
     async init() {
       try {
@@ -189,7 +194,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
             seed: 1,
           }, null)
         }
-        set({ ready: true, catalog, compositions, runtime, runs, draft, lessons, environment })
+        const storage = await api.storage().catch(() => null)
+        set({ ready: true, catalog, compositions, runtime, runs, draft, lessons, environment, storage })
         const latest = runtime.runId ?? runs[0]?.runId ?? null
         if (latest) await get().selectRun(latest)
       } catch (error) {
@@ -240,7 +246,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         const { runId } = await api.startRun(revision.id, get().adapterMode)
         set(state => ({ selectedRunId: runId, cursor: null, runData: { ...state.runData } }))
         await loadRun(runId, true)
-        set({ runs: await api.runs() })
+        await get().refreshRuns()
       } catch (error) {
         set({ error: message(error) })
       }
@@ -275,16 +281,52 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         const { runId } = await api.startRun(revision.id, 'deterministic')
         set({ selectedRunId: runId, cursor: null })
         await loadRun(runId, true)
-        set({ runs: await api.runs() })
+        await get().refreshRuns()
       } catch (error) {
         set({ error: message(error) })
+      }
+    },
+
+    async refreshRuns() {
+      const [runs, storage] = await Promise.all([api.runs(), api.storage().catch(() => null)])
+      set({ runs, storage })
+    },
+
+    async deleteRun(runId) {
+      try {
+        await api.deleteRun(runId)
+        buffers.delete(runId)
+        set(state => {
+          const { [runId]: _removed, ...runData } = state.runData
+          return {
+            runData,
+            selectedRunId: state.selectedRunId === runId ? null : state.selectedRunId,
+            compareRunId: state.compareRunId === runId ? null : state.compareRunId,
+          }
+        })
+        await get().refreshRuns()
+      } catch (error) {
+        set({ error: `删除失败：${message(error)}` })
+      }
+    },
+
+    async pinRun(runId, pinned) {
+      // Optimistic: the checkbox reflects the click at once and rolls back on failure.
+      const previous = get().storage
+      const withPin = (pins: string[]) => (pinned ? [...new Set([...pins, runId])] : pins.filter(id => id !== runId))
+      if (previous) set({ storage: { ...previous, pinned: withPin(previous.pinned) } })
+      try {
+        await api.pinRun(runId, pinned)
+        await get().refreshRuns()
+      } catch (error) {
+        set({ storage: previous, error: message(error) })
       }
     },
 
     async importRun(file) {
       try {
         const manifest = await api.importRun(JSON.parse(await file.text()))
-        set({ runs: await api.runs() })
+        await get().refreshRuns()
         await get().selectRun(manifest.runId)
       } catch (error) {
         set({ error: `导入失败：${message(error)}` })

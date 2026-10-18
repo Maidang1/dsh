@@ -43,6 +43,14 @@ export interface TracePage {
   payloads: Record<string, JsonValue>
 }
 
+export interface StorageUsage {
+  runs: number
+  records: number
+  bytes: number
+  pinned: string[]
+  retention: { maxRuns: number; maxBytes: number } | null
+}
+
 export class ApiError extends Error {
   constructor(readonly status: number, message: string) {
     super(message)
@@ -80,6 +88,9 @@ export const api = {
   commitDraft: (id: string) => request<ExperimentRevision>(`/api/drafts/${encodeURIComponent(id)}/commit`, { method: 'POST' }),
   startRun: (revisionId: string, adapterMode: AdapterMode) =>
     request<{ runId: string }>('/api/runs', { method: 'POST', json: { revisionId, adapterMode } }),
+  storage: () => request<StorageUsage>('/api/storage'),
+  deleteRun: (runId: string) => request<{ deleted: string }>(`/api/runs/${encodeURIComponent(runId)}`, { method: 'DELETE' }),
+  pinRun: (runId: string, pinned: boolean) => request<{ pinned: boolean }>(`/api/runs/${encodeURIComponent(runId)}/pin`, { method: 'PUT', json: { pinned } }),
   importRun: (bundle: unknown) => request<RunManifest>('/api/imports', { method: 'POST', json: bundle }),
   cancelRun: (runId: string) => request<{ cancelling: string }>(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }),
 }

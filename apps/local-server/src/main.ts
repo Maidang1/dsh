@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { loadBuiltCatalog, loadDevCatalog } from './catalog.ts'
 import { RunController } from './controller.ts'
 import { startServer } from './server.ts'
-import { RunStore } from './store.ts'
+import { DEFAULT_RETENTION, RunStore } from './store.ts'
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url))
 const store = new RunStore(process.env.EXPLORER_STORE ?? join(repoRoot, '.explorer'))
@@ -14,11 +14,12 @@ if (recovered.length) console.log(`marked ${recovered.length} unfinished run(s) 
 const built = loadBuiltCatalog()
 if (!built) console.log('lessons are not built; running stages from source (run `pnpm lessons:build`)')
 const catalog = built ?? loadDevCatalog()
-const controller = new RunController({ store, catalog, runTimeoutMs: 5 * 60_000 })
+const controller = new RunController({ store, catalog, runTimeoutMs: 5 * 60_000, retention: DEFAULT_RETENTION })
 const server = await startServer({
   store,
   catalog,
   controller,
+  retention: DEFAULT_RETENTION,
   port: Number(process.env.EXPLORER_PORT ?? 4310),
   staticDir: join(repoRoot, 'apps/explorer/out'),
   ...process.env.EXPLORER_TOKEN ? { launchToken: process.env.EXPLORER_TOKEN } : {},
