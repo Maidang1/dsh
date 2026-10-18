@@ -154,6 +154,21 @@ describe('run lifecycle through a subprocess', () => {
   })
 })
 
+describe('cancelling before the subprocess exists', () => {
+  it('does not start the run and settles it as cancelled', async () => {
+    const controller = new RunController({ store, catalog })
+    controller.subscribe((event) => {
+      if (event.type === 'state' && event.state.phase === 'starting') controller.cancel()
+    })
+    const revision = await revisionWith()
+    const runId = await controller.run(revision.id, 'deterministic')
+    await controller.whenSettled(runId)
+    expect(controller.current!.child).toBeNull()
+    expect(await store.getManifest(runId)).toMatchObject({ outcome: 'cancelled', lastSeq: -1 })
+    expect(controller.phase).toBe('idle')
+  })
+})
+
 describe('trace limits through a subprocess', () => {
   it('stops the run, reports failure and marks the trace truncated', async () => {
     const controller = new RunController({ store, catalog, limits: { maxRecords: 30, maxPayloadBytes: 10_000_000 } })

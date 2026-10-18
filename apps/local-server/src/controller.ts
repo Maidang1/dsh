@@ -206,6 +206,12 @@ export class RunController {
     this.transition({ type: 'VALID' })
     await this.options.store.createRun(manifest, captureEnvironment(adapterMode, this.options.env))
     await this.options.store.saveRunScenario(runId, start.scenario)
+    // A cancel that arrived while the manifest was written must not start anything.
+    if (this.phase === 'stopping') {
+      this.active.settled = { outcome: 'cancelled', truncated: false, error: null }
+      void this.settle(this.active)
+      return runId
+    }
     this.spawn(this.active, start)
     return runId
   }
