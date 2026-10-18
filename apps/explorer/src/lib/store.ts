@@ -1,0 +1,250 @@
+'use client'
+/**
+ * View state (Zustand). It holds selections, the draft being edited and
+ * received traces; it never advances execution on its own — run facts come
+ * from the Node control service (docs/02-technical-architecture.md §6.4).
+ */
+import { create } from 'zustand'
+import type {
+  Composition,
+  ExperimentRevision,
+  JsonValue,
+  PluginInstance,
+  RunManifest,
+  RuntimeState,
+  TraceRecord,
+} from '@harness-explorer/contracts'
+import { TraceBuffer } from '@harness-explorer/trace/browser'
+import { api, ApiError, subscribeRun } from './api'
+import type { Draft, LessonsResponse, PublicCatalog } from './api'
+
+export const DRAFT_ID = 'main'
+const DEFAULT_COMPOSITION = 'minimal-chat'
+
+export interface RunData {
+  runId: string
+  records: TraceRecord[]
+  payloads: Record<string, JsonValue>
+  gaps: Array<{ fromSeq: number; toSeq: number }>
+  settled: { finalSeq: number; outcome: RunManifest['outcome'] } | null
+  revision: ExperimentRevision | null
+}
+
+export type Layer = 'composition' | 'dependency' | 'data'
+
+interface ExplorerState {
+  ready: boolean
+  error: string | null
+  connected: boolean
+  catalog: PublicCatalog | null
+  lessons: LessonsResponse | null
+  compositions: Record<string, Composition>
+  draft: Draft | null
+  runtime: RuntimeState | null
+  runs: RunManifest[]
+  runData: Record<string, RunData>
+  selectedRunId: string | null
+  compareRunId: string | null
+  /** Replay cursor (seq) in the selected run; null follows the latest record. */
+  cursor: number | null
+  selectedInstanceId: string | null
+  layer: Layer
+  listView: boolean
+
+  init(): Promise<void>
+  selectRun(runId: string | null): Promise<void>
+  setCompareRun(runId: string | null): Promise<void>
+  setCursor(cursor: number | null): void
+  selectInstance(id: string | null): void
+  setLayer(layer: Layer): void
+  setListView(listView: boolean): void
+  editDraft(edit: (draft: Draft) => Omit<Draft, 'version'>): Promise<void>
+  run(): Promise<void>
+  cancel(): Promise<void>
+  dismissError(): void
+}
+
+let unsubscribe: (() => void) | null = null
+const buffers = new Map<string, TraceBuffer>()
+
+function message(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+export const useExplorer = create<ExplorerState>((set, get) => {
+  const ingest = (runId: string, records: TraceRecord[], payloads: Record<string, JsonValue>) => {
+    const buffer = buffers.get(runId) ?? new TraceBuffer(runId)
+    buffers.set(runId, buffer)
+    buffer.add(records)
+    set(state => {
+      const previous = state.runData[runId]
+      return {
+        runData: {
+          ...state.runData,
+          [runId]: {
+            runId,
+            revision: previous?.revision ?? null,
+            settled: previous?.settled ?? null,
+            records: buffer.contiguous(),
+            payloads: { ...previous?.payloads, ...payloads },
+            gaps: buffer.gaps(),
+          },
+        },
+      }
+    })
+  }
+
+  const settle = (runId: string, settled: RunData['settled']) => {
+    buffers.get(runId)?.settle(settled!.finalSeq)
+    set(state => {
+      const data = state.runData[runId]
+      if (!data) return {}
+      return { runData: { ...state.runData, [runId]: { ...data, settled, gaps: buffers.get(runId)?.gaps() ?? [] } } }
+    })
+  }
+
+  const loadRevision = async (runId: string, revisionId: string) => {
+    const revision = await api.revision(revisionId)
+    set(state => {
+      const data = state.runData[runId]
+      return data ? { runData: { ...state.runData, [runId]: { ...data, revision } } } : {}
+    })
+  }
+
+  /** Load a run: a live run streams over SSE; a settled run is read from the store. */
+  const loadRun = async (runId: string, live: boolean) => {
+    if (!get().runData[runId]) {
+      set(state => ({ runData: { ...state.runData, [runId]: { runId, records: [], payloads: {}, gaps: [], settled: null, revision: null } } }))
+    }
+    const { manifest } = await api.run(runId)
+    void loadRevision(runId, manifest.experimentRevisionId)
+    if (live) {
+      unsubscribe?.()
+      unsubscribe = subscribeRun(runId, {
+        onState: runtime => set({ runtime }),
+        onTrace: (records, payloads) => ingest(runId, records, payloads),
+        onSettled: (settled) => {
+          settle(runId, settled)
+          void api.runs().then(runs => set({ runs }))
+        },
+        onConnection: connected => set({ connected }),
+      })
+    } else if (!get().runData[runId]?.settled) {
+      const page = await api.trace(runId)
+      ingest(runId, page.records, page.payloads)
+      settle(runId, { finalSeq: manifest.lastSeq, outcome: manifest.outcome })
+    }
+  }
+
+  return {
+    ready: false,
+    error: null,
+    connected: false,
+    catalog: null,
+    lessons: null,
+    compositions: {},
+    draft: null,
+    runtime: null,
+    runs: [],
+    runData: {},
+    selectedRunId: null,
+    compareRunId: null,
+    cursor: null,
+    selectedInstanceId: null,
+    layer: 'composition',
+    listView: false,
+
+    async init() {
+      try {
+        const [catalog, compositions, runtime, runs] = await Promise.all([api.catalog(), api.compositions(), api.state(), api.runs()])
+        const lessons = await api.lessons().catch(() => null)
+        let draft: Draft
+        try {
+          draft = await api.draft(DRAFT_ID)
+        } catch (error) {
+          if (!(error instanceof ApiError) || error.status !== 404) throw error
+          const composition = compositions[DEFAULT_COMPOSITION] ?? Object.values(compositions)[0]!
+          draft = await api.saveDraft({
+            id: DRAFT_ID,
+            parentRevisionId: null,
+            composition,
+            scenarioId: catalog.scenarios[0]!.id,
+            seed: 1,
+          }, null)
+        }
+        set({ ready: true, catalog, compositions, runtime, runs, draft, lessons })
+        const latest = runtime.runId ?? runs[0]?.runId ?? null
+        if (latest) await get().selectRun(latest)
+      } catch (error) {
+        set({ error: message(error) })
+      }
+    },
+
+    async selectRun(runId) {
+      set({ selectedRunId: runId, cursor: null })
+      if (!runId) return
+      try {
+        await loadRun(runId, get().runtime?.runId === runId)
+      } catch (error) {
+        set({ error: message(error) })
+      }
+    },
+
+    async setCompareRun(runId) {
+      set({ compareRunId: runId })
+      if (runId) await loadRun(runId, false).catch(error => set({ error: message(error) }))
+    },
+
+    setCursor: cursor => set({ cursor }),
+    selectInstance: selectedInstanceId => set({ selectedInstanceId }),
+    setLayer: layer => set({ layer }),
+    setListView: listView => set({ listView }),
+    dismissError: () => set({ error: null }),
+
+    async editDraft(edit) {
+      const draft = get().draft
+      if (!draft) return
+      try {
+        const saved = await api.saveDraft(edit(draft), draft.version)
+        set({ draft: saved })
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+          set({ draft: await api.draft(DRAFT_ID), error: `草稿已在其他标签页修改，已载入最新版本：${error.message}` })
+        } else {
+          set({ error: message(error) })
+        }
+      }
+    },
+
+    async run() {
+      try {
+        const revision = await api.commitDraft(DRAFT_ID)
+        const { runId } = await api.startRun(revision.id, 'deterministic')
+        set(state => ({ selectedRunId: runId, cursor: null, runData: { ...state.runData } }))
+        await loadRun(runId, true)
+        set({ runs: await api.runs() })
+      } catch (error) {
+        set({ error: message(error) })
+      }
+    },
+
+    async cancel() {
+      const runId = get().runtime?.runId
+      if (runId) await api.cancelRun(runId).catch(error => set({ error: message(error) }))
+    },
+  }
+})
+
+/** Composition the tree should show: the selected run's revision, else the draft. */
+export function shownComposition(state: Pick<ExplorerState, 'selectedRunId' | 'runData' | 'draft'>): {
+  composition: Composition | null
+  source: 'run' | 'draft'
+} {
+  const revision = state.selectedRunId ? state.runData[state.selectedRunId]?.revision : null
+  if (revision) return { composition: revision.composition, source: 'run' }
+  return { composition: state.draft?.composition ?? null, source: 'draft' }
+}
+
+export function instanceById(composition: Composition | null, id: string | null): PluginInstance | undefined {
+  return composition?.instances.find(instance => instance.id === id)
+}

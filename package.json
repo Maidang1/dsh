@@ -7,18 +7,22 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json && tsc -p apps/explorer/tsconfig.json",
     "test": "vitest run",
     "test:contracts": "vitest run packages/contracts packages/teaching-runtime",
     "explorer": "tsx apps/local-server/src/main.ts",
     "lessons:build": "tsx scripts/build-lessons.ts",
     "lessons:verify": "tsx scripts/verify-lessons.ts",
-    "lessons:verify-upstream": "tsx scripts/verify-source-links.ts"
+    "lessons:verify-upstream": "tsx scripts/verify-source-links.ts",
+    "build:ui": "pnpm --filter @harness-explorer/explorer build",
+    "build": "pnpm lessons:build && pnpm build:ui",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@harness-explorer/contracts": "workspace:*",
     "@harness-explorer/lesson-kit": "workspace:*",
     "@harness-explorer/teaching-plugins": "workspace:*",
+    "@playwright/test": "1.64.1",
     "@types/node": "^22.20.5",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",

@@ -184,6 +184,7 @@ export async function runScenario(input: RunInput): Promise<RunResult> {
     recorder.record({ kind: 'diagnostic', name: TraceName.diagnostic, payload: { level: 'error', message: `${error.name}: ${error.message}` } })
   } finally {
     observer.currentStepId = undefined
+    recorder.record({ kind: 'checkpoint', name: TraceName.runSettle, payload: { outcome } })
     // Run settlement: unload in reverse mount order so cleanup is recorded.
     try {
       for (const instanceId of [...fibers.keys()].reverse()) await unmount(instanceId)

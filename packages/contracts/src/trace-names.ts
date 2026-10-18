@@ -16,6 +16,8 @@ export const TraceName = {
   modelResponse: 'model/response',
   sessionEvent: 'session/event',
   scenarioStep: 'scenario/step',
+  /** Scenario finished; what follows is run settlement (unloading every instance). */
+  runSettle: 'run/settle',
   diagnostic: 'diagnostic',
 } as const
 

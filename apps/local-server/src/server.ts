@@ -23,6 +23,8 @@ export interface ServerOptions {
   controller: RunController
   port?: number
   staticDir?: string
+  /** Fixed launch token for automated browser tests; random when omitted. */
+  launchToken?: string
 }
 
 export interface RunningServer {
@@ -102,7 +104,7 @@ function publicCatalog(catalog: Catalog) {
 
 export function startServer(options: ServerOptions): Promise<RunningServer> {
   const { store, catalog, controller } = options
-  let launchToken: string | null = randomBytes(24).toString('base64url')
+  let launchToken: string | null = options.launchToken ?? randomBytes(24).toString('base64url')
   const sessions = new Set<string>()
   let origins: string[] = []
   let hosts: string[] = []
@@ -207,6 +209,8 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
           stages: lessons.stages.map(({ modulePath: _modulePath, definition: { module: _module, ...definition }, ...stage }) => ({ ...stage, definition })),
         })
       }
+      case 'GET /compositions':
+        return sendJson(response, 200, catalog.compositions)
       case 'GET /state':
         return sendJson(response, 200, controller.state())
       case 'GET /drafts/:id':

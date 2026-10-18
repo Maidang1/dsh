@@ -1,0 +1,132 @@
+'use client'
+/** 整体组合 workspace: tree, selection summary, timeline and request comparison (docs/01 §3.1, §4). */
+import { useEffect, useState } from 'react'
+import { useExplorer, shownComposition, instanceById } from '@/lib/store'
+import { useReplay } from '@/lib/replay'
+import { PluginList, PluginTree } from './PluginTree'
+import { Inspector, PluginLibrary, RunBar, Timeline, outcomeText } from './Panels'
+import { RequestDiff } from './RequestDiff'
+
+type BottomTab = 'timeline' | 'diff'
+
+export function Workbench() {
+  const state = useExplorer()
+  const [tab, setTab] = useState<BottomTab>('timeline')
+  useEffect(() => { void useExplorer.getState().init() }, [])
+
+  const selected = state.selectedRunId ? state.runData[state.selectedRunId] : undefined
+  const replay = useReplay(selected, state.cursor)
+  const { composition, source } = shownComposition(state)
+
+  if (state.error && !state.ready) {
+    return (
+      <main className="centered">
+        <h1>Harness Explorer</h1>
+        <p className="error-text">{state.error}</p>
+        <p>请使用 <code>pnpm explorer</code> 在终端打印的启动链接打开本页面。</p>
+      </main>
+    )
+  }
+  if (!state.ready || !state.catalog || !state.draft || !composition) return <main className="centered"><p>正在连接本地控制服务…</p></main>
+
+  const { catalog, draft } = state
+  const instance = instanceById(composition, state.selectedInstanceId)
+  const stage = catalog.stages.find(item => item.id === instance?.stageId)
+  const draftDiffers = source === 'run' && JSON.stringify(composition) !== JSON.stringify(draft.composition)
+
+  const updateInstances = (update: (instances: typeof draft.composition.instances) => typeof draft.composition.instances) =>
+    state.editDraft(current => ({ ...current, composition: { ...current.composition, instances: update(current.composition.instances) } }))
+
+  return (
+    <div className="workbench">
+      <header className="workbench__header">
+        <h1>Harness Explorer</h1>
+        <RunBar
+          catalog={catalog}
+          draft={draft}
+          runtime={state.runtime}
+          connected={state.connected}
+          onScenario={scenarioId => state.editDraft(current => ({ ...current, scenarioId }))}
+          onRun={() => void state.run()}
+          onCancel={() => void state.cancel()}
+        />
+      </header>
+
+      {state.error ? (
+        <div className="banner banner--error" role="alert">
+          {state.error} <button type="button" onClick={state.dismissError}>知道了</button>
+        </div>
+      ) : null}
+
+      <div className="workbench__subbar">
+        <label>
+          查看运行
+          <select value={state.selectedRunId ?? ''} onChange={event => void state.selectRun(event.target.value || null)}>
+            <option value="">（草稿，尚未运行）</option>
+            {state.runs.map(run => <option key={run.runId} value={run.runId}>{run.runId} · {outcomeText(run.outcome)}</option>)}
+          </select>
+        </label>
+        <div className="segmented" role="group" aria-label="图层">
+          {(['composition', 'dependency', 'data'] as const).map(layer => (
+            <button key={layer} type="button" aria-pressed={state.layer === layer} onClick={() => state.setLayer(layer)}>
+              {{ composition: '组合', dependency: '依赖', data: '运行数据' }[layer]}
+            </button>
+          ))}
+        </div>
+        <label className="checkbox">
+          <input type="checkbox" checked={state.listView} onChange={event => state.setListView(event.target.checked)} />
+          列表视图
+        </label>
+        <PluginLibrary
+          stages={catalog.stages}
+          draft={draft}
+          onAdd={item => void updateInstances(instances => [...instances, {
+            id: instances.some(existing => existing.id === item.pluginDefinitionId) ? `${item.pluginDefinitionId}-${instances.length}` : item.pluginDefinitionId,
+            definitionId: item.pluginDefinitionId,
+            stageId: item.id,
+            scopeId: 'root',
+            parentId: null,
+            enabled: true,
+            config: {},
+          }])}
+        />
+      </div>
+
+      {source === 'run' ? (
+        <div className={`banner ${draftDiffers ? 'banner--warning' : ''}`}>
+          正在查看运行 {state.selectedRunId} 绑定的版本 {selected?.revision?.id}。
+          {draftDiffers ? ' 当前草稿与它不同，下一次运行会使用草稿。' : ''}
+        </div>
+      ) : null}
+
+      <div className="workbench__main">
+        <section className="workbench__tree">
+          {state.listView
+            ? <PluginList composition={composition} snapshot={replay.snapshot} selectedInstanceId={state.selectedInstanceId} onSelect={state.selectInstance} />
+            : <PluginTree composition={composition} stages={catalog.stages} snapshot={replay.snapshot} layer={state.layer} selectedInstanceId={state.selectedInstanceId} onSelect={state.selectInstance} />}
+        </section>
+        <Inspector
+          instance={instance}
+          stage={stage}
+          snapshot={replay.snapshot}
+          lessons={state.lessons}
+          editable={source === 'draft' || !draftDiffers}
+          stagesOfDefinition={catalog.stages.filter(item => item.pluginDefinitionId === instance?.definitionId)}
+          onRemove={id => void updateInstances(instances => instances.filter(item => item.id !== id))}
+          onStage={(id, stageId) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, stageId } : item)))}
+          onEnabled={(id, enabled) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, enabled } : item)))}
+        />
+      </div>
+
+      <section className="workbench__bottom">
+        <div className="segmented" role="tablist" aria-label="底部面板">
+          <button type="button" role="tab" aria-selected={tab === 'timeline'} onClick={() => setTab('timeline')}>执行轨迹</button>
+          <button type="button" role="tab" aria-selected={tab === 'diff'} onClick={() => setTab('diff')}>请求对比</button>
+        </div>
+        {tab === 'timeline'
+          ? <Timeline data={selected} seq={replay.seq} lastSeq={replay.lastSeq} onCursor={state.setCursor} />
+          : <RequestDiff runs={state.runs} selected={selected} compare={state.compareRunId ? state.runData[state.compareRunId] : undefined} compareRunId={state.compareRunId} onCompareRun={runId => void state.setCompareRun(runId)} />}
+      </section>
+    </div>
+  )
+}

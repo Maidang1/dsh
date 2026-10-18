@@ -2,7 +2,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ModelScript, Scenario } from '@harness-explorer/contracts'
+import { Composition, ModelScript, Scenario } from '@harness-explorer/contracts'
 import type { ExecutableStageDefinition, JsonValue } from '@harness-explorer/contracts'
 import { devStages } from '@harness-explorer/teaching-plugins'
 import { LessonBuild } from '@harness-explorer/lesson-kit'
@@ -17,17 +17,19 @@ export interface Catalog {
   stages: readonly ExecutableStageDefinition[]
   scenarios: Readonly<Record<string, Scenario>>
   modelScripts: Readonly<Record<string, ModelScript>>
+  /** Preset compositions a learner can start a draft from. */
+  compositions: Readonly<Record<string, Composition>>
 }
 
 export function scenarioHash(scenario: Scenario) {
   return hashJson(scenario as unknown as JsonValue)
 }
 
-function readDir<T>(dir: string, parse: (value: unknown) => T & { id: string }): Record<string, T> {
+function readDir<T>(dir: string, parse: (value: unknown) => T, key: (value: T, file: string) => string): Record<string, T> {
   const result: Record<string, T> = {}
   for (const name of readdirSync(dir).filter(file => file.endsWith('.json')).sort()) {
     const value = parse(JSON.parse(readFileSync(join(dir, name), 'utf8')))
-    result[value.id] = value
+    result[key(value, name.replace(/\.json$/, ''))] = value
   }
   return result
 }
@@ -42,8 +44,9 @@ export function loadDevCatalog(root = repoRoot): Catalog {
     runtimeVersion: 'dev',
     upstreamCommit: lock.commit,
     stages: devStages,
-    scenarios: readDir(join(root, 'fixtures/scenarios'), value => Scenario.parse(value)),
-    modelScripts: readDir(join(root, 'fixtures/model-scripts'), value => ModelScript.parse(value)),
+    scenarios: readDir(join(root, 'fixtures/scenarios'), value => Scenario.parse(value), value => value.id),
+    modelScripts: readDir(join(root, 'fixtures/model-scripts'), value => ModelScript.parse(value), value => value.id),
+    compositions: readDir(join(root, 'fixtures/compositions'), value => Composition.parse(value), (_value, file) => file),
   }
 }
 

@@ -7,7 +7,7 @@ import { startServer } from './server.ts'
 import { RunStore } from './store.ts'
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url))
-const store = new RunStore(join(repoRoot, '.explorer'))
+const store = new RunStore(process.env.EXPLORER_STORE ?? join(repoRoot, '.explorer'))
 const recovered = await store.recoverInterrupted()
 if (recovered.length) console.log(`marked ${recovered.length} unfinished run(s) as interrupted`)
 
@@ -21,6 +21,7 @@ const server = await startServer({
   controller,
   port: Number(process.env.EXPLORER_PORT ?? 4310),
   staticDir: join(repoRoot, 'apps/explorer/out'),
+  ...process.env.EXPLORER_TOKEN ? { launchToken: process.env.EXPLORER_TOKEN } : {},
 })
 console.log(`Harness Explorer: ${server.launchUrl}`)
 

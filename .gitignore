@@ -4,3 +4,9 @@ dist/
 *.tsbuildinfo
 coverage/
 .cache/
+.next/
+apps/explorer/out/
+next-env.d.ts
+.explorer-e2e/
+test-results/
+playwright-report/
