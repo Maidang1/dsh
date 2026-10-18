@@ -1,0 +1,17 @@
+{
+  "id": "prompt-section-lifecycle",
+  "title": "挂载、请求、卸载、再请求：观察提示词片段的注册与清理",
+  "modelScriptId": "greeting",
+  "memoryFiles": {},
+  "adapterModes": ["deterministic"],
+  "steps": [
+    { "kind": "input", "id": "baseline", "sessionId": "s-a", "text": "你好" },
+    { "kind": "mount", "id": "mount", "instanceId": "prompt-contributor" },
+    { "kind": "input", "id": "with-section", "sessionId": "s-b", "text": "你好" },
+    { "kind": "snapshot", "id": "keep-b", "label": "保存请求 B" },
+    { "kind": "unmount", "id": "unmount", "instanceId": "prompt-contributor" },
+    { "kind": "input", "id": "after-unmount", "sessionId": "s-c", "text": "你好" },
+    { "kind": "mount", "id": "remount", "instanceId": "prompt-contributor" },
+    { "kind": "input", "id": "after-remount", "sessionId": "s-d", "text": "你好" }
+  ]
+}

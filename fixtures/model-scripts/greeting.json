@@ -1,0 +1,8 @@
+{
+  "id": "greeting",
+  "onUnmatched": "fail",
+  "rules": [
+    { "id": "short-style", "match": { "lastUserText": "你好", "systemIncludes": ["回答时使用短句"] }, "respond": { "kind": "text", "chunks": ["你好。"] } },
+    { "id": "default", "match": { "lastUserText": "你好" }, "respond": { "kind": "text", "chunks": ["你好！", "有什么可以帮你？"] } }
+  ]
+}

@@ -30,6 +30,15 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
 
+  packages/teaching-plugins:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: 4.0.5
+        version: 4.0.5
+      '@harness-explorer/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/teaching-runtime:
     dependencies:
       '@deepseek-ai/cordis':
@@ -38,6 +47,12 @@ importers:
       '@harness-explorer/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@harness-explorer/teaching-plugins':
+        specifier: workspace:*
+        version: link:../teaching-plugins
+      '@harness-explorer/trace':
+        specifier: workspace:*
+        version: link:../trace
 
   packages/trace:
     dependencies:
