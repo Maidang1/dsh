@@ -32,7 +32,7 @@ content/plugins/prompt-contributor/
 
 这里的插件名称和阶段编号为本项目教学内容规划，不声称上游存在同名插件或同样的拆分。上游真实的 SystemPrompt.section() 可作为提示词贡献行为的依据。
 
-构建时依次执行：解析 manifest → 类型检查所有阶段 → 编译模块 → 提取展示代码 → 生成高亮数据 → 校验源码引用 → 执行阶段场景 → 输出 manifest 和内容哈希。
+构建时依次执行：解析 manifest → 类型检查所有阶段 → 编译模块 → 生成 ExecutableStageDefinition（模块、sourceHash、requires、provides）→ 提取展示代码 → 生成高亮数据 → 校验源码引用 → 执行阶段场景 → 输出 manifest 和内容哈希。
 
 生成文件不手工编辑。共享辅助实现需可展开查看，不能在用户面前把核心行为藏在未解释的 helper 里。
 
@@ -46,15 +46,14 @@ interface LessonStage {
   title: string
   objective: string
   kind: 'executable' | 'explanation'
+  codeStageId: string             // 展示的完整源码所属的可执行阶段；executable 阶段即运行它
   sourceFiles: string[]
-  entryFile?: string
-  sourceHash: string
+  sourceHash: string              // 构建生成，必须等于 codeStageId 的 sourceHash
   focusAnchors: string[]
   architectureNodeIds: string[]
   contractIds: string[]
   scenarioIds: string[]
   expectedObservations: string[]
-  requiresServices: string[]
   upstreamRefIds: string[]
   simplifications: string[]
 }
@@ -72,7 +71,7 @@ interface PluginLesson {
 }
 ```
 
-manifest 作者不手写 sourceHash，构建器计算后注入。可执行阶段必须有入口文件、场景和契约；解释阶段不允许显示“运行本阶段”按钮，也不让上一阶段的运行结果冒充本阶段结果。
+manifest 作者不手写 sourceHash，构建器计算后注入。服务依赖不在课程中声明，由构建器从阶段源码生成到 ExecutableStageDefinition（见技术架构 §5.1），运行器不读取 LessonStage。可执行阶段必须有场景和契约；解释阶段可以用不同焦点展示某个可执行阶段的代码，但不显示“运行本阶段”按钮，也不让其他阶段的运行结果冒充本阶段结果。
 
 expectedObservations 是验收断言和用户引导，不能作为生成运行轨迹的数据源。
 
@@ -80,7 +79,7 @@ expectedObservations 是验收断言和用户引导，不能作为生成运行�
 
 ### 4.1 先验证最小接入
 
-使用 Next.js + MDX 的最小页面验证 Code Hike MDX 插件、静态高亮、客户端阶段切换和代码过渡。验证 Node 本地启动、阶段模块在运行子进程中的加载路径、浏览器轨迹订阅及重连，并记录确切版本。
+使用 Next.js + MDX 的最小页面验证 Code Hike MDX 插件、静态高亮、客户端阶段切换和代码过渡。验证静态导出由 Node 控制服务同源托管、阶段模块在运行子进程中的加载路径、浏览器轨迹订阅及重连，并记录确切版本。静态导出不满足需求时，按技术架构 §3 改用 Next.js custom server。
 
 推荐把语法分析和高亮放在构建期。客户端只加载当前插件的处理后代码数据和动画组件。避免每次切换阶段在主线程重新解析所有文件。
 
@@ -92,7 +91,7 @@ expectedObservations 是验收断言和用户引导，不能作为生成运行�
 - StageNavigator：切换教学阶段，不直接操作运行游标。
 - CodeTransition：封装选定版本的代码 token 过渡实现。
 - SourceMention：文中符号链接，定位代码和架构节点。
-- StageRunButton：提交绑定 sourceHash 的运行命令。
+- StageRunButton：以所选运行的 revision 为基础替换该实例的 stageId，派生新 revision 后提交运行，命令绑定 sourceHash。
 - UpstreamComparison：并排展示精简代码、上游片段与删减说明。
 
 这些封装隔离 Code Hike 版本变化；领域数据不依赖其内部 token 结构。
@@ -163,7 +162,7 @@ interface ArchitectureEdge {
 | 00 入口 | 最小插件入口，不注册提示词 | 挂载后发送固定输入 | 请求与基线相同 |
 | 01 依赖 | 声明 systemPrompt 服务依赖 | 分别提供/缺失服务 | 激活或等待原因来自依赖机制 |
 | 02 注册 | 注册具名、带顺序的文本片段 | 发送相同输入 | 注册表新增项，下一次请求出现片段 |
-| 03 清理 | 解释并保留可逆注册机制 | 挂载、卸载、再次请求 | 注册项移除，后续请求无该片段 |
+| 03 清理 | 解释并保留可逆注册机制 | 同一次运行的场景步骤：挂载 → 请求 → 卸载 → 请求 | 注册项移除，后续请求无该片段 |
 | 04 作用域 | 加入同名局部覆盖场景 | 两个不同作用域 | 局部覆盖只影响对应作用域 |
 
 清理不一定通过“新加 dispose 函数”实现。如果底层注册 API 已返回并绑定 disposer，就逐步揭示这段机制，而不是人为制造一个会泄漏的早期版本。阶段 03 可以是对真实已存在机制的展开解释；若标为 executable，则该阶段代码必须独立可运行。
@@ -186,7 +185,7 @@ interface ArchitectureEdge {
 2. 编写行为契约，列出保留、替代和不支持的范围。
 3. 先实现最终精简版本并通过契约验证。
 4. 将最终实现拆成少量有意义的阶段；每阶段有可运行目标或明确的解释目标。
-5. 配置确定性输入，执行生成轨迹，不手绘成功结果。
+5. 配置场景步骤和确定性模型脚本，执行生成轨迹，不手绘成功结果。
 6. 编写架构映射和解释，引用具体符号。
 7. 使用 Code Hike 预览增量，检查每步是否只引入少量新概念。
 8. 校验所有可执行阶段类型检查、构建、测试和展示哈希一致。

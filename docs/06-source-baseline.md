@@ -2,7 +2,7 @@
 
 ## 1 参考基线
 
-目标仓库：[Maidang1/dsh](https://github.com/Maidang1/dsh)。文档创建时克隆结果为空仓库。
+目标仓库：[Maidang1/dsh](https://github.com/Maidang1/dsh)。目前仓库只包含设计文档，尚无应用代码。
 
 学习对象：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)。本方案固定参考 commit：[`687f282e8625c6b8d11ff58211a90524be2e4317`](https://github.com/deepseek-ai/deepseek-harness/commit/687f282e8625c6b8d11ff58211a90524be2e4317)。该 commit 的提交日期为 2026-10-17；文档整理日期为 2026-10-18。
 
@@ -72,7 +72,10 @@ waterfall 是 around-middleware，监听器通过 next 委托，可以不调用 
 | 项目 | 为什么需要验证 | 负责阶段 |
 |---|---|---|
 | 最小对话插件依赖闭包 | 不能从概念图推出实际最少组合 | P0-01 |
-| Cordis 与上游插件的 Node 复用 | 需验证固定版本的加载方式、依赖及观测插桩 | P0-04 |
+| Cordis 与上游插件的 Node 复用 | 需验证固定版本的加载方式与依赖 | P0-04 |
+| 上游复用插件的观测适配 | 需在不改源码、不改语义的前提下记录生命周期、服务解析、事件分发与 Session 事件 | P0-04 |
+| 前端托管方式 | Next.js 静态导出能否由 Node 同源托管并满足 Code Hike/MDX；否则改用 custom server | P0-03 |
+| 真实模型提供方与凭据变量 | 依据上游 llm 插件实际支持的提供方确定 | P0-01、P2-06 |
 | Fiber 完整转换表 | inventory phase 不能推出完整转换关系 | P0-02 |
 | 依赖丢失/恢复和清理顺序 | 错误简化会影响所有插件教学 | P0-02、P2 |
 | Code Hike 与本地 Node 应用组合 | MDX、客户端交互、执行模块和轨迹订阅需一起验证 | P0-03 |
@@ -81,7 +84,7 @@ waterfall 是 around-middleware，监听器通过 next 委托，可以不调用 
 | 上游差分执行环境 | 需要固定依赖和可重复的参考夹具 | P5-04 |
 | 动态代码动画的具体 API | 依赖所选 Code Hike 版本 | P0-03、P4-01 |
 
-执行位置已调整为本地 Node，原有插件树、代码教学、轨迹、回放和数据对比保持不变。这是本项目设计决定，尚不表示已运行上游、证明全部插件可直接复用，或完成真实环境集成。
+执行位置已调整为本地 Node，原有插件树、代码教学、轨迹、回放和数据对比保持不变；基础插件计划复用上游、被讲解插件使用教学实现。这是本项目设计决定，尚不表示已运行上游、证明全部插件可直接复用或可观测，或完成真实环境集成。
 
 ## 5 基线升级流程
 
