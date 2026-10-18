@@ -17,7 +17,9 @@ const reports = await verifyStageRuns(build, {
   modelScripts: Object.fromEntries(Object.values(modelScripts).map(script => [script.id, script])),
   compositionOf: id => manifests.get(id)!,
 })
+const passed = (report: (typeof reports)[number]) => report.outcome === 'completed' && !report.providesMismatches.length
 for (const report of reports) {
-  console.log(`${report.outcome === 'completed' ? 'ok  ' : 'FAIL'} ${report.lessonId}/${report.stageId} · ${report.scenarioId}${report.error ? ` · ${report.error}` : ''}`)
+  const notes = [report.error, ...report.providesMismatches].filter(Boolean).map(note => ` · ${note}`).join('')
+  console.log(`${passed(report) ? 'ok  ' : 'FAIL'} ${report.lessonId}/${report.stageId} · ${report.scenarioId}${notes}`)
 }
-if (reports.some(report => report.outcome !== 'completed')) process.exit(1)
+if (!reports.every(passed)) process.exit(1)

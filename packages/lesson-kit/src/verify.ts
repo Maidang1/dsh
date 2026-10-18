@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
-import type { Composition, ModelScript, RunOutcome, Scenario } from '@harness-explorer/contracts'
+import { PluginPhasePayload, ServiceChangePayload, TraceName } from '@harness-explorer/contracts'
+import type { Composition, ExecutableStageDefinition, ModelScript, RunOutcome, Scenario } from '@harness-explorer/contracts'
 import { runScenario } from '@harness-explorer/teaching-runtime'
+import type { RunResult } from '@harness-explorer/teaching-runtime'
 import { excerptHash } from './anchors.ts'
 import type { LessonBuild } from './schema.ts'
 
@@ -11,6 +13,8 @@ export interface StageRunReport {
   scenarioId: string
   outcome: RunOutcome
   error: string | null
+  /** Instances whose observed services differ from their stage's declared `provides`. */
+  providesMismatches: string[]
 }
 
 export interface VerifyOptions {
@@ -56,11 +60,42 @@ export async function verifyStageRuns(lessonBuild: LessonBuild, options: VerifyO
           scenarioId,
           outcome: result.outcome,
           error: result.error ? `${result.error.name}: ${result.error.message}` : null,
+          providesMismatches: checkProvides(result.recorder, composition, stages),
         })
       }
     }
   }
   return reports
+}
+
+/**
+ * Compare each instance that became active with the services the trace saw
+ * it provide. `provides` is declared in the catalog (docs/02 §5.1); this is
+ * where a declaration that disagrees with the code is caught, since the
+ * dependency layer and composition validation trust it.
+ */
+export function checkProvides(recorder: RunResult['recorder'], composition: Composition, stages: readonly ExecutableStageDefinition[]): string[] {
+  const active = new Set<string>()
+  const observed = new Map<string, Set<string>>()
+  for (const record of recorder.records) {
+    if (record.name === TraceName.pluginPhase && record.instanceId && record.payloadRef) {
+      if (PluginPhasePayload.parse(recorder.payloads.get(record.payloadRef)).phase === 'active') active.add(record.instanceId)
+    } else if (record.name === TraceName.serviceChange && record.payloadRef) {
+      const change = ServiceChangePayload.parse(recorder.payloads.get(record.payloadRef))
+      if (!change.available || !change.providerInstanceId) continue
+      const names = observed.get(change.providerInstanceId) ?? new Set<string>()
+      observed.set(change.providerInstanceId, names.add(change.name))
+    }
+  }
+  const mismatches: string[] = []
+  for (const instance of composition.instances.filter(item => active.has(item.id))) {
+    const declared = [...stages.find(stage => stage.id === instance.stageId)?.provides ?? []].sort()
+    const actual = [...observed.get(instance.id) ?? []].sort()
+    if (declared.join(',') !== actual.join(',')) {
+      mismatches.push(`${instance.id} (${instance.stageId}) provides [${actual.join(', ')}] but the catalog lists [${declared.join(', ')}]`)
+    }
+  }
+  return mismatches
 }
 
 export interface UpstreamMismatch {

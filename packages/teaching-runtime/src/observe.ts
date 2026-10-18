@@ -145,11 +145,14 @@ export class Observer {
   }
 
   private serviceChanged(name: string, value: unknown, provider: Context) {
-    if (!this.watchedServices.has(name)) return
+    const providerInstanceId = this.instanceOf(provider.fiber) ?? null
+    // Undeclared services of a mounted instance are recorded too, so a stage
+    // whose catalog `provides` is wrong shows up instead of being invisible.
+    if (!this.watchedServices.has(name) && providerInstanceId === null) return
     this.record({
       kind: 'service',
       name: TraceName.serviceChange,
-      payload: { name, providerInstanceId: this.instanceOf(provider.fiber) ?? null, available: value !== undefined },
+      payload: { name, providerInstanceId, available: value !== undefined },
     })
     if (value === undefined) {
       if (name === 'systemPrompt') this.syncRegistrations('prompt-section')

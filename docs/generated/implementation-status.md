@@ -2,7 +2,7 @@
 
 按 `04-implementation-plan.md` §11 记录每个任务的完成情况：交付位置、验收依据（测试与契约）、未支持的边界。上游版本均为 `687f282e8625c6b8d11ff58211a90524be2e4317`。更新于 2026-10-18，对应提交 `e4f8f7f` 之后。
 
-验证命令：`pnpm typecheck`、`pnpm test`（135 个用例）、`pnpm lessons:build`、`pnpm lessons:verify`、`pnpm lessons:verify-upstream`、`pnpm build:ui`、`pnpm test:e2e`（16 个用例）。
+验证命令：`pnpm typecheck`、`pnpm test`（137 个用例）、`pnpm lessons:build`、`pnpm lessons:verify`、`pnpm lessons:verify-upstream`、`pnpm build:ui`、`pnpm test:e2e`（16 个用例）。
 
 ## P0 依据与技术验证
 
@@ -19,7 +19,7 @@
 |---|---|---|---|---|
 | P1-01 workspace | 完成 | pnpm workspace、TypeScript strict、Vitest、Playwright、`.github/workflows/ci.yml` | 本地全部检查通过 | CI 工作流尚未在 GitHub 上实际运行 |
 | P1-02 公共协议 | 完成 | `packages/contracts` | `contracts/tests/schemas.spec.ts` | — |
-| P1-03 内容编译器 | 完成 | `packages/lesson-kit`、`scripts/*-lessons.ts` | `lesson-kit/tests/build.spec.ts`（BUILD-01、锚点、依赖一致性） | 阶段 `provides` 仍由目录声明，只核对了 `requires` |
+| P1-03 内容编译器 | 完成 | `packages/lesson-kit`、`scripts/*-lessons.ts` | `lesson-kit/tests/build.spec.ts`（BUILD-01、锚点、`requires` 一致性）、`provides.spec.ts`（`lessons:verify` 按运行中实际提供的服务核对 `provides`） | `provides` 只在课程场景中实际激活的实例上核对 |
 
 ## P2 教学运行时与 Node 宿主
 
