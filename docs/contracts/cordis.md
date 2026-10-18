@@ -33,7 +33,7 @@
 
 - 上游：`vendor/cordis/src/events.ts` 的 `waterfall`。
 - 期望：A-before、B-before、inner、B-after、A-after；返回值逐层传回。
-- 验证：`cordis-baseline.spec.ts`。状态：verified。
+- 验证：`cordis-baseline.spec.ts`；工具中间件上的两层顺序见 `tool-contract.spec.ts`「01-two-layers」。状态：verified。
 
 ### EVT-02 waterfall 短路
 
@@ -42,5 +42,5 @@
 
 ### EVT-03 异常传播
 
-- 期望：监听器抛出的异常沿 waterfall 向外传播，不被吞掉。
-- 验证：尚无测试。状态：planned。
+- 期望：监听器抛出的异常沿 waterfall 向外传播，不被吞掉，后续工具体不执行。
+- 验证：`packages/teaching-runtime/tests/tool-contract.spec.ts`「propagates a throwing pre-execute listener」。状态：verified。

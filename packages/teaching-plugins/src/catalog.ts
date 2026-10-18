@@ -30,4 +30,8 @@ export const devStages: readonly ExecutableStageDefinition[] = [
   stage('prompt-contributor', '00-entry', [], []),
   stage('prompt-contributor', '01-dependency', ['systemPrompt'], []),
   stage('prompt-contributor', '02-section', ['systemPrompt'], []),
+  stage('calculator', 'main', ['tools'], []),
+  stage('tool-guard', '00-observe', ['tools'], []),
+  stage('tool-guard', '01-two-layers', ['tools'], []),
+  stage('tool-guard', '02-deny', ['tools'], []),
 ]

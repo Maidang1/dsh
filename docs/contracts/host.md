@@ -12,8 +12,8 @@
 
 ### OBS-01 观测不改变语义
 
-- 期望：开启与关闭观测时规范化的会话事件一致。
-- 验证：尚未实现。状态：planned。
+- 期望：开启与关闭观测时，Sessions 服务实际提交的持久事件一致，且与轨迹记录一致；关闭观测时只剩场景检查点。
+- 验证：`packages/teaching-runtime/tests/observation.spec.ts`。状态：verified。
 
 ### HOST-01 刷新与重连
 

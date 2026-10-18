@@ -34,6 +34,10 @@ export interface RunInput {
   signal?: AbortSignal
   limits?: Pick<RecorderOptions, 'maxRecords' | 'maxPayloadBytes'>
   onRecord?: RecorderOptions['onRecord']
+  /** Turn observation off entirely (OBS-01); the trace then holds only scenario checkpoints. */
+  observe?: boolean
+  /** Inspect the live Cordis root after the scenario and before settlement (tests only). */
+  beforeSettle?: (root: Context) => void
 }
 
 export interface RunResult {
@@ -117,7 +121,7 @@ export async function runScenario(input: RunInput): Promise<RunResult> {
   }
 
   const root = new Context()
-  const observer = new Observer(root, recorder, new Set(stages.flatMap(stage => stage.provides)))
+  const observer = new Observer(root, recorder, new Set(stages.flatMap(stage => stage.provides)), input.observe ?? true)
   const fibers = new Map<string, Fiber>()
 
   const configFor = (instance: PluginInstance) => {
@@ -143,12 +147,28 @@ export async function runScenario(input: RunInput): Promise<RunResult> {
     await fiber.dispose()
   }
 
+  // A cancel step arms a trigger; the next turn is aborted when it reaches that checkpoint.
+  let armedCancel = null as { stepId: string; checkpoint: string; controller: AbortController } | null
+  observer.onCheckpoint = (name) => {
+    if (armedCancel && name === armedCancel.checkpoint && !armedCancel.controller.signal.aborted) {
+      armedCancel.controller.abort(new Error(`cancelled by scenario step "${armedCancel.stepId}"`))
+    }
+  }
+
   const runStep = async (step: ScenarioStep) => {
     switch (step.kind) {
       case 'input': {
         const agentLoop = root.get('agentLoop')
         if (!agentLoop) throw new Error('agentLoop is not active; check the plugin tree for missing services')
-        await agentLoop.submit(step.sessionId, step.text, input.signal)
+        const cancel = armedCancel
+        const signal = AbortSignal.any([cancel?.controller.signal, input.signal].filter((item): item is AbortSignal => item !== undefined))
+        try {
+          await agentLoop.submit(step.sessionId, step.text, signal)
+        } catch (error) {
+          // A turn cancelled on purpose by the scenario is an expected outcome, not a run failure.
+          if (!cancel?.controller.signal.aborted || input.signal?.aborted) throw error
+        }
+        if (cancel?.controller.signal.aborted) armedCancel = null
         break
       }
       case 'mount':
@@ -160,7 +180,9 @@ export async function runScenario(input: RunInput): Promise<RunResult> {
       case 'snapshot':
         break
       case 'cancel':
-        throw new Error('cancel steps are not supported by this runtime version')
+        if (armedCancel) throw new Error(`cancel step "${step.id}" while "${armedCancel.stepId}" is still armed`)
+        armedCancel = { stepId: step.id, checkpoint: step.afterCheckpoint, controller: new AbortController() }
+        break
     }
   }
 
@@ -178,6 +200,8 @@ export async function runScenario(input: RunInput): Promise<RunResult> {
       await runStep(step)
       await settle()
     }
+    input.beforeSettle?.(root)
+    if (armedCancel) throw new Error(`checkpoint "${armedCancel.checkpoint}" of cancel step "${armedCancel.stepId}" was never reached`)
   } catch (reason) {
     outcome = input.signal?.aborted ? 'cancelled' : 'failed'
     error = reason instanceof Error ? { name: reason.name, message: reason.message } : { name: 'Error', message: String(reason) }

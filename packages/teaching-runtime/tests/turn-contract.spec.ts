@@ -159,3 +159,34 @@ describe('TOOL-02: a model calling an undeclared tool', () => {
     expect(events.at(-1)?.data).toMatchObject({ reason: { kind: 'error' } })
   })
 })
+
+describe('TURN-02: cancelling while the request is being prepared', () => {
+  it('commits neither system nor user messages and lets the scenario continue', async () => {
+    const result = await run({
+      scenario: scenario([
+        { kind: 'cancel', id: 'arm', afterCheckpoint: 'agent-loop:request-prepared' },
+        { kind: 'input', id: 'ask', sessionId: 's', text: '你好' },
+        { kind: 'input', id: 'again', sessionId: 's2', text: '你好' },
+      ]),
+    })
+    expect(result.error).toBeNull()
+    expect(result.outcome).toBe('completed')
+    const events = sessionTypes(result, 's')
+    expect(events.map(event => event.type)).toEqual(['turn/start', 'step/start', 'step/end', 'turn/end'])
+    expect(events.at(-1)?.data).toEqual({ turn: 1, reason: { kind: 'aborted' } })
+    expect(requestsOf(result, 'ask')).toEqual([])
+    expect(result.recorder.records.some(record => record.name === 'checkpoint/agent-loop:request-prepared' && record.scenarioStepId === 'ask')).toBe(true)
+    expect(sessionTypes(result, 's2').at(-1)?.data).toEqual({ turn: 1, reason: { kind: 'completed' } })
+  })
+
+  it('fails the run when the armed checkpoint is never reached', async () => {
+    const result = await run({
+      scenario: scenario([
+        { kind: 'cancel', id: 'arm', afterCheckpoint: 'agent-loop:no-such-checkpoint' },
+        { kind: 'input', id: 'ask', sessionId: 's', text: '你好' },
+      ]),
+    })
+    expect(result.outcome).toBe('failed')
+    expect(result.error?.message).toMatch(/was never reached/)
+  })
+})

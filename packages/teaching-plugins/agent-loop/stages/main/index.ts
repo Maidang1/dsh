@@ -7,7 +7,8 @@
  * request is prepared → model call → assistant/message → tool/call and
  * tool/result → step/end (always) → next step while tools ran → turn/end
  * (always) with completed / blocked / aborted / error.
- * Not kept: the inbox, retries, runtime-context snapshots, request headers,
+ * Not kept: interrupted assistant prefixes on cancel (upstream commits
+ * them with `interrupted: true`; this subset commits nothing), the inbox, retries, runtime-context snapshots, request headers,
  * max-tokens handling, compaction, subagents. Upstream injects `agents` and
  * `sessionProjections` too; this subset has no agent registry or projections.
  */
@@ -16,6 +17,7 @@ import type { ModelRequest } from '../../../llm/stages/main/index.ts'
 import { renderPrompt } from '../../../system-prompt/stages/main/index.ts'
 import type { PromptAssembly } from '../../../system-prompt/stages/main/index.ts'
 import { ROOT_SCOPE } from '../../../shared/scope.ts'
+import { checkpoint } from '../../../shared/checkpoint.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -129,11 +131,14 @@ export class AgentLoop extends Service {
       tools: assembly.tools,
     }
     // The request is fully prepared; only now do system and user messages become durable.
+    checkpoint(this.ctx, 'agent-loop:request-prepared', { requestId: request.requestId })
     signal.throwIfAborted()
     if (system !== systemCommitted) sessions.append(sessionId, { type: 'system/message', turnId, stepId, data: { text: system } })
     for (const text of messages) sessions.append(sessionId, { type: 'user/message', turnId, stepId, data: { text } })
 
     const response = await llm.complete(request, signal)
+    checkpoint(this.ctx, 'agent-loop:model-responded', { requestId: request.requestId })
+    signal.throwIfAborted()
     sessions.append(sessionId, { type: 'assistant/message', turnId, stepId, data: { text: response.text, toolCalls: response.toolCalls } })
     for (const call of response.toolCalls) {
       sessions.append(sessionId, { type: 'tool/call', turnId, stepId, data: { callId: call.id, name: call.name, arguments: call.arguments } })

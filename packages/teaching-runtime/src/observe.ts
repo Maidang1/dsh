@@ -21,9 +21,21 @@ export class Observer {
   private readonly disposers: Array<() => unknown> = []
   /** Scenario step currently executing, attached to every record. */
   currentStepId: string | undefined
+  /** Called after a teaching checkpoint is recorded. */
+  onCheckpoint: ((name: string) => void) | undefined
 
-  constructor(private readonly root: Context, private readonly recorder: Recorder, private readonly watchedServices: ReadonlySet<string>) {
-    this.listen()
+  /**
+   * With `recording` off nothing is observed; only the checkpoint hook that
+   * drives scenario cancel steps stays attached. OBS-01 compares both modes.
+   */
+  constructor(
+    private readonly root: Context,
+    private readonly recorder: Recorder,
+    private readonly watchedServices: ReadonlySet<string>,
+    recording = true,
+  ) {
+    if (recording) this.listen()
+    else this.disposers.push(root.on('explorer/checkpoint', name => this.onCheckpoint?.(name)))
   }
 
   /** Mount through this so the fiber is attributed to the composition instance. */
@@ -95,6 +107,11 @@ export class Observer {
         ...event.stepId ? { stepId: event.stepId } : {},
         payload: { sessionId, type: event.type, data: event.data },
       })
+    }))
+
+    keep(root.on('explorer/checkpoint', (name, data) => {
+      this.record({ kind: 'checkpoint', name: `checkpoint/${name}`, payload: data })
+      this.onCheckpoint?.(name)
     }))
 
     keep(root.on('llm/request', (request) => {

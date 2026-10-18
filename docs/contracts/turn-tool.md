@@ -10,8 +10,9 @@
 
 ### TURN-02 请求准备取消
 
-- 期望：准备请求期间取消不提前提交 system/user。
-- 验证：控制器协作取消测试覆盖 pre-step 阶段取消（`apps/local-server/tests/controller.spec.ts`）；场景内 cancel 步骤尚未实现。状态：partial。
+- 期望：在 `agent-loop:request-prepared` 检查点取消时不提交 system/user，不发请求，turn 以 aborted 结束，场景继续。
+- 验证：`packages/teaching-runtime/tests/turn-contract.spec.ts`「TURN-02」、`apps/local-server/tests/controller.spec.ts`（pre-step 阶段的协作取消）。状态：verified。
+- 差异：上游取消时会以 `interrupted: true` 提交已流出的回复前缀，教学版不提交。
 
 ### TURN-03 普通文本响应
 
@@ -26,9 +27,10 @@
 ### TOOL-02 未知工具或非法参数
 
 - 期望：确定性模型调用未声明的工具时场景失败；tools.execute 对未知工具、非法参数、执行失败返回不同状态。
-- 验证：`turn-contract.spec.ts` 覆盖未声明工具；execute 的三种状态尚无独立测试。状态：partial。
+- 验证：`turn-contract.spec.ts` 覆盖未声明工具；`tool-contract.spec.ts` 覆盖 execute 的 unknown-tool、invalid-arguments、failed。状态：verified。
 
 ### TOOL-03 前置拦截
 
-- 期望：`tools/pre-execute` 拦截时不执行工具。
-- 验证：尚未实现。状态：planned。
+- 上游：`packages/core/tools/src/index.ts` 的 `prepareExecution`（deny 走 post-result 路径）与 `postExecute`。
+- 期望：`tools/pre-execute` 返回 deny 时不执行工具体，结果为 `Error: <reason>` 且仍经过 `tools/post-execute`；post-execute 可接受、替换内容或拦截为错误。
+- 验证：`tool-contract.spec.ts`。状态：verified。
