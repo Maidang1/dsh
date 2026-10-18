@@ -191,7 +191,7 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
       } else if (!current) {
         const manifest = await store.getManifest(runId).catch(() => null)
         if (manifest && manifest.outcome !== 'running') {
-          sendSettled({ type: 'settled', runId, finalSeq: manifest.lastSeq, outcome: manifest.outcome })
+          sendSettled({ type: 'settled', runId, finalSeq: manifest.lastSeq, outcome: manifest.outcome, completeness: manifest.completeness })
         }
       }
     }

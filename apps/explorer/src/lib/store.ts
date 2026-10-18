@@ -28,7 +28,7 @@ export interface RunData {
   records: readonly TraceRecord[]
   payloads: Record<string, JsonValue>
   gaps: Array<{ fromSeq: number; toSeq: number }>
-  settled: { finalSeq: number; outcome: RunManifest['outcome'] } | null
+  settled: { finalSeq: number; outcome: RunManifest['outcome']; completeness: RunManifest['completeness'] } | null
   revision: ExperimentRevision | null
 }
 
@@ -150,7 +150,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     } else if (!get().runData[runId]?.settled) {
       const page = await api.trace(runId)
       ingest(runId, page.records, page.payloads)
-      settle(runId, { finalSeq: manifest.lastSeq, outcome: manifest.outcome })
+      settle(runId, { finalSeq: manifest.lastSeq, outcome: manifest.outcome, completeness: manifest.completeness })
     }
   }
 

@@ -90,7 +90,7 @@ describe('run lifecycle through a subprocess', () => {
 
     const phases = events.filter(event => event.type === 'state').map(event => event.state.phase)
     expect([...new Set(phases)]).toEqual(['validating', 'starting', 'running', 'settling', 'idle'])
-    expect(events.at(-1)).toEqual({ type: 'settled', runId, finalSeq: manifest.lastSeq, outcome: 'completed' })
+    expect(events.at(-1)).toEqual({ type: 'settled', runId, finalSeq: manifest.lastSeq, outcome: 'completed', completeness: 'complete' })
   })
 
   it('HOST-02: rejects a second RUN while busy and uses a fresh subprocess per run', async () => {
@@ -151,6 +151,20 @@ describe('run lifecycle through a subprocess', () => {
     expect(await store.getManifest(runId)).toMatchObject({ outcome: 'terminated', completeness: 'truncated' })
     expect(controller.state().error?.message).toMatch(/terminated before cleanup finished/)
     expect(controller.phase).toBe('idle')
+  })
+})
+
+describe('trace limits through a subprocess', () => {
+  it('stops the run, reports failure and marks the trace truncated', async () => {
+    const controller = new RunController({ store, catalog, limits: { maxRecords: 30, maxPayloadBytes: 10_000_000 } })
+    const events: ControllerEvent[] = []
+    controller.subscribe(event => events.push(event))
+    const revision = await revisionWith()
+    const runId = await controller.run(revision.id, 'deterministic')
+    await controller.whenSettled(runId)
+    expect(await store.getManifest(runId)).toMatchObject({ outcome: 'failed', completeness: 'truncated', lastSeq: 29 })
+    expect(events.at(-1)).toMatchObject({ type: 'settled', outcome: 'failed', completeness: 'truncated' })
+    expect(controller.state().error?.message).toMatch(/trace limit reached/)
   })
 })
 

@@ -98,7 +98,7 @@ export const api = {
 export interface StreamHandlers {
   onState(state: RuntimeState): void
   onTrace(records: TraceRecord[], payloads: Record<string, JsonValue>): void
-  onSettled(settled: { runId: string; finalSeq: number; outcome: RunManifest['outcome'] }): void
+  onSettled(settled: { runId: string; finalSeq: number; outcome: RunManifest['outcome']; completeness: RunManifest['completeness'] }): void
   onConnection(connected: boolean): void
 }
 

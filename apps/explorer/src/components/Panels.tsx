@@ -230,6 +230,7 @@ export function Timeline({ data, seq, lastSeq, onCursor }: TimelineProps) {
       </div>
       {data.gaps.length ? <p className="warning-text">轨迹缺口：{data.gaps.map(gap => `${gap.fromSeq}–${gap.toSeq}`).join('，')}，结果不完整。</p> : null}
       {data.settled ? <p className="muted">运行结果：{outcomeText(data.settled.outcome)}，最后序号 {data.settled.finalSeq}</p> : <p className="muted">运行未结算，结果尚不完整。</p>}
+      {data.settled?.completeness === 'truncated' ? <p className="warning-text">轨迹不完整：达到采集上限、写盘失败或运行中断，缺失的尾部不能视为成功。</p> : null}
       <TimelineRows records={records} payloads={data.payloads} seq={seq} onCursor={onCursor} />
     </section>
   )

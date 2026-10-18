@@ -64,7 +64,7 @@ export class ControlError extends Error {
 export type ControllerEvent =
   | { type: 'state'; state: RuntimeState }
   | { type: 'trace'; runId: string; records: TraceRecord[] }
-  | { type: 'settled'; runId: string; finalSeq: number; outcome: RunOutcome }
+  | { type: 'settled'; runId: string; finalSeq: number; outcome: RunOutcome; completeness: RunManifest['completeness'] }
 
 export interface ControllerOptions {
   store: RunStore
@@ -90,7 +90,7 @@ interface ActiveRun {
   settled: { outcome: Exclude<RunOutcome, 'running' | 'interrupted'>; truncated: boolean; error: RuntimeError | null } | null
   killed: boolean
   /** Set once the run is settled and written; reconnecting clients get it replayed. */
-  finished: { finalSeq: number; outcome: RunOutcome } | null
+  finished: { finalSeq: number; outcome: RunOutcome; completeness: RunManifest['completeness'] } | null
   /** Serialized store writes; never rejects, the first failure is kept in writeError. */
   writes: Promise<void>
   writeError: unknown
@@ -355,7 +355,8 @@ export class RunController {
       if (run.writeError === undefined) notSaved(error)
     }
     this.error ??= settled.error
-    run.finished = { finalSeq, outcome: settled.outcome }
+    const completeness: RunManifest['completeness'] = settled.truncated || run.writeError !== undefined ? 'truncated' : 'complete'
+    run.finished = { finalSeq, outcome: settled.outcome, completeness }
     // No run is writing between settlement and the next RUN, so payload collection is safe here.
     if (this.options.retention) {
       try {
@@ -365,7 +366,7 @@ export class RunController {
       }
     }
     this.transition({ type: 'SETTLED' })
-    this.emit({ type: 'settled', runId: run.runId, finalSeq, outcome: settled.outcome })
+    this.emit({ type: 'settled', runId: run.runId, finalSeq, outcome: settled.outcome, completeness })
     run.resolveDone()
   }
 }

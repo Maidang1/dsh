@@ -8,7 +8,7 @@ import { devStages } from '@harness-explorer/teaching-plugins'
 import { describe, expect, it } from 'vitest'
 import { importStageLoader } from '../src/index.ts'
 import type { RunResult } from '../src/index.ts'
-import { minimalChat, payloadOf, requestsOf, run, scenario } from './helpers.ts'
+import { lifecycleScenario, minimalChat, payloadOf, requestsOf, run, scenario } from './helpers.ts'
 
 function inlineStage(id: string, requires: string[], plugin: Plugin) {
   const definition: ExecutableStageDefinition = {
@@ -222,5 +222,39 @@ describe('LIFE-02: a failing cleanup is never reported as success', () => {
       lastPhases.set(record.instanceId!, payloadOf<{ phase: unknown }>(result, record).phase)
     }
     expect([...lastPhases.values()].every(phase => phase === null)).toBe(true)
+  })
+})
+
+describe('plugin tree lifecycle in scenarios', () => {
+  const parent = inlineStage('parent', [], { name: 'parent', apply() {} })
+  const child = inlineStage('child', [], { name: 'child', apply() {} })
+
+  it('unloads children with their parent and lets them be mounted again under a remounted parent', async () => {
+    const setup = withInline(minimalChat(), parent, child)
+    const childInstance = setup.composition.instances.find(instance => instance.id === 'child')!
+    childInstance.parentId = 'parent'
+    const result = await run({
+      ...setup,
+      scenario: scenario([
+        { kind: 'unmount', id: 'drop-parent', instanceId: 'parent' },
+        { kind: 'mount', id: 'parent-again', instanceId: 'parent' },
+        { kind: 'mount', id: 'child-again', instanceId: 'child' },
+      ]),
+    })
+    expect(result.error).toBeNull()
+    const childPhases = result.recorder.records
+      .filter(record => record.name === TraceName.pluginPhase && record.instanceId === 'child')
+      .map(record => ({ step: record.scenarioStepId, phase: payloadOf<{ phase: unknown }>(result, record).phase }))
+    expect(childPhases.filter(item => item.step === 'drop-parent').at(-1)?.phase).toBeNull()
+    expect(childPhases.filter(item => item.step === 'child-again').at(-1)?.phase).toBe('active')
+  })
+})
+
+describe('trace limits', () => {
+  it('stops the scenario instead of reporting a truncated run as completed', async () => {
+    const result = await run({ scenario: lifecycleScenario(), limits: { maxRecords: 40, maxPayloadBytes: 10_000_000 } })
+    expect(result.recorder.truncated).toBe(true)
+    expect(result.outcome).toBe('failed')
+    expect(result.error?.name).toBe('TraceLimitError')
   })
 })

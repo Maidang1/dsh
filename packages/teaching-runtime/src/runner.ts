@@ -74,6 +74,10 @@ export class CleanupError extends Error {
   override name = 'CleanupError'
 }
 
+export class TraceLimitError extends Error {
+  override name = 'TraceLimitError'
+}
+
 /** Static checks that do not need to run any plugin code (docs/02 §7). */
 export function validateComposition(composition: Composition, scenario: Scenario, stages: readonly ExecutableStageDefinition[]) {
   const stageById = new Map(stages.map(stage => [stage.id, stage]))
@@ -162,10 +166,16 @@ export async function runScenario(input: RunInput): Promise<RunResult> {
     fibers.set(instance.id, fiber)
   }
 
+  /** Instances mounted under `instanceId`; Cordis disposes them with their parent. */
+  const descendants = (instanceId: string): string[] => composition.instances
+    .filter(instance => instance.parentId === instanceId)
+    .flatMap(instance => [instance.id, ...descendants(instance.id)])
+
   const unmount = async (instanceId: string) => {
     const fiber = fibers.get(instanceId)
     if (!fiber) throw new Error(`instance "${instanceId}" is not mounted`)
     fibers.delete(instanceId)
+    for (const id of descendants(instanceId)) fibers.delete(id)
     observer.drainLoggedErrors()
     await fiber.dispose()
     await settle()
@@ -215,6 +225,11 @@ export async function runScenario(input: RunInput): Promise<RunResult> {
     }
   }
 
+  // Past the record or payload limit the tail would be missing, so stop rather than report success.
+  const checkLimits = () => {
+    if (recorder.truncated) throw new TraceLimitError(`trace limit reached after seq ${recorder.lastSeq}; the run was stopped`)
+  }
+
   let outcome: RunResult['outcome'] = 'completed'
   let error: RunResult['error'] = null
   try {
@@ -222,12 +237,14 @@ export async function runScenario(input: RunInput): Promise<RunResult> {
       if (instance.enabled) mount(instance)
     }
     await settle()
+    checkLimits()
     for (const step of scenario.steps) {
       input.signal?.throwIfAborted()
       observer.currentStepId = step.id
       recorder.record({ kind: 'checkpoint', name: TraceName.scenarioStep, scenarioStepId: step.id, payload: step })
       await runStep(step)
       await settle()
+      checkLimits()
     }
     input.beforeSettle?.(root)
     if (armedCancel) throw new Error(`checkpoint "${armedCancel.checkpoint}" of cancel step "${armedCancel.stepId}" was never reached`)
