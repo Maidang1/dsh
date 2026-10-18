@@ -11,7 +11,7 @@ import type {
   Scenario,
   TraceRecord,
 } from '@harness-explorer/contracts'
-import type { BuiltLesson, BuiltStage } from '@harness-explorer/lesson-kit'
+import type { BuiltLesson, BuiltStage } from '@harness-explorer/lesson-kit/schema'
 
 export type PublicStage = Omit<ExecutableStageDefinition, 'module'>
 

@@ -60,6 +60,12 @@ interface ExplorerState {
   setListView(listView: boolean): void
   editDraft(edit: (draft: Draft) => Omit<Draft, 'version'>): Promise<void>
   run(): Promise<void>
+  /**
+   * Run one lesson stage: derive a revision from the selected run's (or the
+   * draft's) composition with the plugin switched to `stageId` (docs/02 §5.4).
+   * The main draft is left untouched.
+   */
+  runLessonStage(lessonId: string, definitionId: string, stageId: string, scenarioId: string): Promise<void>
   cancel(): Promise<void>
   dismissError(): void
 }
@@ -221,6 +227,41 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         const revision = await api.commitDraft(DRAFT_ID)
         const { runId } = await api.startRun(revision.id, 'deterministic')
         set(state => ({ selectedRunId: runId, cursor: null, runData: { ...state.runData } }))
+        await loadRun(runId, true)
+        set({ runs: await api.runs() })
+      } catch (error) {
+        set({ error: message(error) })
+      }
+    },
+
+    async runLessonStage(lessonId, definitionId, stageId, scenarioId) {
+      const state = get()
+      const base = state.selectedRunId ? state.runData[state.selectedRunId]?.revision : null
+      const composition = base?.composition ?? state.draft?.composition
+      if (!composition) return
+      if (!composition.instances.some(instance => instance.definitionId === definitionId)) {
+        set({ error: `组合中没有 ${definitionId} 的实例，请先在整体组合中添加` })
+        return
+      }
+      const draftId = `lesson-${lessonId}`
+      try {
+        const existing = await api.draft(draftId).catch((error: unknown) => {
+          if (error instanceof ApiError && error.status === 404) return null
+          throw error
+        })
+        await api.saveDraft({
+          id: draftId,
+          parentRevisionId: base?.id ?? null,
+          composition: {
+            ...composition,
+            instances: composition.instances.map(instance => (instance.definitionId === definitionId ? { ...instance, stageId } : instance)),
+          },
+          scenarioId,
+          seed: base?.seed ?? 1,
+        }, existing?.version ?? null)
+        const revision = await api.commitDraft(draftId)
+        const { runId } = await api.startRun(revision.id, 'deterministic')
+        set({ selectedRunId: runId, cursor: null })
         await loadRun(runId, true)
         set({ runs: await api.runs() })
       } catch (error) {

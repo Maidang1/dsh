@@ -4,20 +4,28 @@
  */
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
-import { LAUNCH_TOKEN } from '../../../playwright.config'
+import { STORAGE_STATE } from '../../../playwright.config'
 
 test.describe.configure({ mode: 'serial' })
 
-// The launch token is single-use, so one signed-in page is shared by the serial tests.
+// One page is shared by the serial tests; the session comes from global setup.
 let page: Page
 test.beforeAll(async ({ browser }) => {
-  page = await (await browser.newContext()).newPage()
-  await page.goto(`/?token=${LAUNCH_TOKEN}`)
+  page = await (await browser.newContext({ storageState: STORAGE_STATE })).newPage()
+  await page.goto('/')
 })
 test.afterAll(() => page.context().close())
 
 test('runs the scenario and replays without re-executing', async () => {
+  const runsBefore = (await page.request.get('/api/runs').then(response => response.json())).length
   await page.getByRole('button', { name: '运行教学代码' }).click()
+  // Wait for this run, not an earlier one that also reads 已完成.
+  await expect.poll(async () => (await page.request.get('/api/runs').then(response => response.json())) as Array<{ outcome: string }>, { timeout: 20_000 })
+    .toEqual(expect.arrayContaining([expect.objectContaining({ outcome: 'completed' })]))
+  await expect.poll(async () => (await page.request.get('/api/runs').then(response => response.json())).length).toBe(runsBefore + 1)
+  await expect(page.getByLabel('查看运行')).toHaveValue(/^run-/)
+  const latest = (await page.request.get('/api/runs').then(response => response.json()))[0] as { runId: string }
+  await expect(page.getByLabel('查看运行')).toHaveValue(latest.runId)
   await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
 
   // Default view is the scenario's final state, before settlement unloads everything.
@@ -51,7 +59,7 @@ test('keeps the run after a reload and offers a text list of the tree', async ()
 })
 
 test('rejects visitors without the launch token', async ({ browser }) => {
-  const context = await browser.newContext()
+  const context = await browser.newContext({ storageState: undefined })
   const response = await (await context.newPage()).goto('/api/state')
   expect(response?.status()).toBe(401)
   await context.close()
