@@ -11,7 +11,7 @@
 
 ### PROMPT-02 同域重复名称
 
-- 期望：同一作用域第二次注册同名片段抛出 `prompt section "<name>" is already registered`，第二个插件进入 failed，已有片段不被覆盖。
+- 期望：同一作用域第二次注册同名片段抛出 `prompt section "<name>" is already registered`，第二个插件进入 failed，已有片段不被覆盖。`order` 不是有限数（NaN、Infinity）时注册抛出 TypeError，插件进入 failed，不留下片段。
 - 验证：`prompt-contract.spec.ts`。状态：verified。
 
 ### PROMPT-03 局部同名覆盖

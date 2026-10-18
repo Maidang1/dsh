@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import SystemPrompt from '../../teaching-plugins/system-prompt/stages/main/index.ts'
 import Tools from '../../teaching-plugins/tools/stages/main/index.ts'
+import { toPluginPhase } from '../src/fiber-phase.ts'
 import { payloadOf, run } from './helpers.ts'
 import type { RunResult } from '../src/index.ts'
 
@@ -118,5 +119,28 @@ describe('Tools.execute outcomes (TOOL-02, TOOL-03, EVT-03)', () => {
     const { service, executed } = await tools(ctx => ctx.on('tools/pre-execute', () => Promise.reject(new Error('listener failed'))))
     await expect(service.execute('echo', 'hi')).rejects.toThrow('listener failed')
     expect(executed()).toBe(0)
+  })
+})
+
+describe('duplicate tool registration (docs/03 §8)', () => {
+  it('fails the second registrant and keeps the first tool in place', async () => {
+    const root = new Context()
+    root.plugin(SystemPrompt as unknown as Plugin)
+    root.plugin(Tools as unknown as Plugin)
+    const registrant = (name: string, reply: string): Plugin => ({
+      name,
+      inject: ['tools'],
+      apply(ctx: Context) {
+        ctx.tools.register({ name: 'echo', description: reply, parameters: {}, execute: () => reply })
+      },
+    })
+    const first = root.plugin(registrant('first', 'from first'))
+    const second = root.plugin(registrant('second', 'from second'))
+    await new Promise(resolve => setImmediate(resolve))
+    expect(toPluginPhase(first.state)).toBe('active')
+    expect(toPluginPhase(second.state)).toBe('failed')
+    const service = root.get('tools') as Tools
+    expect(await service.execute('echo', null)).toEqual({ status: 'ok', content: 'from first' })
+    expect((root.get('systemPrompt') as SystemPrompt).assemble().tools.map(tool => tool.name)).toEqual(['echo'])
   })
 })

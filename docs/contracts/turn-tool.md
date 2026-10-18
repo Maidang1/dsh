@@ -26,8 +26,8 @@
 
 ### TOOL-02 未知工具或非法参数
 
-- 期望：确定性模型调用未声明的工具时场景失败；tools.execute 对未知工具、非法参数、执行失败返回不同状态。
-- 验证：`turn-contract.spec.ts` 覆盖未声明工具；`tool-contract.spec.ts` 覆盖 execute 的 unknown-tool、invalid-arguments、failed。状态：verified。
+- 期望：确定性模型调用未声明的工具时场景失败；tools.execute 对未知工具、非法参数、执行失败返回不同状态；同名工具第二次注册使注册者进入 failed，已有工具与模型可见的工具声明不变。
+- 验证：`turn-contract.spec.ts` 覆盖未声明工具；`tool-contract.spec.ts` 覆盖 execute 的 unknown-tool、invalid-arguments、failed 与重复注册。状态：verified。
 
 ### TOOL-03 前置拦截
 

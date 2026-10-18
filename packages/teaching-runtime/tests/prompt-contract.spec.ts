@@ -4,7 +4,11 @@
  */
 import { TraceName } from '@harness-explorer/contracts'
 import type { PluginPhasePayload, RegistrationAddPayload } from '@harness-explorer/contracts'
+import { Context } from '@deepseek-ai/cordis'
+import type { Plugin } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
+import SystemPrompt from '../../teaching-plugins/system-prompt/stages/main/index.ts'
+import { toPluginPhase } from '../src/fiber-phase.ts'
 import { finalView, lifecycleScenario, minimalChat, payloadOf, recordsOf, requestsOf, run, scenario } from './helpers.ts'
 
 const SECTION_TEXT = '回答时使用短句'
@@ -139,5 +143,23 @@ describe('missing dependency (CTX-01 on the contributor)', () => {
     expect(phases[0]).toEqual({ phase: 'pending', dependencyStatus: 'missing', reason: 'waiting for systemPrompt', error: null })
     expect(phases.some(phase => phase.phase === 'active')).toBe(false)
     expect(view.registrations).toEqual({})
+  })
+})
+
+describe('section order validity (docs/03 §7)', () => {
+  it.each([Number.NaN, Number.POSITIVE_INFINITY])('rejects order %s and registers nothing', async (order) => {
+    const root = new Context()
+    root.plugin(SystemPrompt as unknown as Plugin)
+    const contributor = root.plugin({
+      name: 'contributor',
+      inject: ['systemPrompt'],
+      apply(ctx: Context) {
+        ctx.systemPrompt.section({ name: 'lesson:bad', order, text: 'never shown' })
+      },
+    } satisfies Plugin)
+    await new Promise(resolve => setImmediate(resolve))
+    expect(toPluginPhase(contributor.state)).toBe('failed')
+    const assembly = (root.get('systemPrompt') as SystemPrompt).assemble()
+    expect(assembly.sections.map(section => section.name)).toEqual(['deployment:persona'])
   })
 })
