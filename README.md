@@ -76,4 +76,4 @@ docs                   设计文档、契约与技术决定
 
 ## 来源与许可
 
-学习对象：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)（MIT）。复用的 `@deepseek-ai/cordis` 与 `@deepseek-ai/cosmokit` 以 MIT 许可从 npm 引入。教学插件为本项目重写的精简实现，每个文件注明对应的上游路径与保留、删减的行为；课程中的上游片段以链接和行号引用，不复制源码。
+学习对象：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)（MIT）。复用的 `@deepseek-ai/cordis`、`@deepseek-ai/cosmokit` 与 `@deepseek-ai/schemastery` 以 MIT 许可从 npm 引入。核心插件为本项目重写的精简实现，文件头部注明对应的上游路径与保留、删减的行为；prompt-contributor、tool-guard、calculator 是本项目编写的教学插件；课程中的上游片段以链接和行号引用，不复制源码。许可证原文与依赖说明见 [第三方声明](THIRD_PARTY_NOTICES.md)。
