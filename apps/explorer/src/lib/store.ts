@@ -87,6 +87,12 @@ interface ExplorerState {
 
 let unsubscribe: (() => void) | null = null
 let stopStateWatch: (() => void) | null = null
+/**
+ * Draft edits are saved one after another, each applied to the draft the
+ * previous save returned; two quick edits would otherwise both claim the
+ * same version and the second would be refused as a conflict and lost.
+ */
+let draftEdits: Promise<void> = Promise.resolve()
 const buffers = new Map<string, TraceBuffer>()
 
 export const useExplorer = create<ExplorerState>((set, get) => {
@@ -236,23 +242,28 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     setAdapterMode: adapterMode => set({ adapterMode }),
     dismissError: () => set({ error: null }),
 
-    async editDraft(edit) {
-      const draft = get().draft
-      if (!draft) return
-      try {
-        const saved = await api.saveDraft(edit(draft), draft.version)
-        set({ draft: saved })
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 409) {
-          set({ draft: await api.draft(DRAFT_ID), error: `草稿已在其他标签页修改，已载入最新版本：${error.message}` })
-        } else {
-          set({ error: describeFailure('saveDraft', error) })
+    editDraft(edit) {
+      draftEdits = draftEdits.catch(() => {}).then(async () => {
+        const draft = get().draft
+        if (!draft) return
+        try {
+          const saved = await api.saveDraft(edit(draft), draft.version)
+          set({ draft: saved })
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 409) {
+            set({ draft: await api.draft(DRAFT_ID), error: `草稿已在其他标签页修改，已载入最新版本：${error.message}` })
+          } else {
+            set({ error: describeFailure('saveDraft', error) })
+          }
         }
-      }
+      })
+      return draftEdits
     },
 
     async run() {
       try {
+        // Run what the learner last edited, not a draft with a save still in flight.
+        await draftEdits.catch(() => {})
         const revision = await api.commitDraft(DRAFT_ID)
         const { runId } = await api.startRun(revision.id, get().adapterMode)
         set(state => ({ selectedRunId: runId, cursor: null, runData: { ...state.runData } }))

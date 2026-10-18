@@ -188,3 +188,27 @@ test('a second tab learns about a run started in another tab without reloading',
     if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
   }
 })
+
+test('an added tool is declared, called, and its result reaches the next request', async ({ page }) => {
+  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加插件' }).click()
+  await page.locator('.library__list li').filter({ hasText: 'calculator' }).getByRole('button', { name: '添加到根作用域' }).click()
+  await page.getByLabel('场景').selectOption('tool-guard')
+  await page.getByRole('button', { name: '运行教学代码' }).click()
+  await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
+
+  await page.getByRole('tab', { name: '请求对比' }).click()
+  await page.getByLabel('请求 A').selectOption({ index: 0 })
+  await page.getByLabel('请求 B').selectOption({ index: 1 })
+  const diff = page.getByRole('region', { name: '请求对比' })
+  // Both requests declare the tool; only B carries the call and its result.
+  await expect(diff.getByRole('heading', { name: 'tools' }).locator('xpath=following-sibling::*[1]')).toHaveText('无差异')
+  await expect(diff.locator('.diff__added', { hasText: '"role": "tool"' })).toHaveCount(1)
+  await expect(diff.locator('.diff__added', { hasText: '"content": "3"' })).toHaveCount(1)
+
+  const origin = { origin: new URL(page.url()).origin }
+  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
+    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
+  }
+})
