@@ -20,9 +20,11 @@ const toolChat = (): Composition => Composition.parse(fixture('compositions/tool
 const calculator = (): ModelScript => ModelScript.parse(fixture('model-scripts/calculator.json'))
 const toolGuard = (): Scenario => Scenario.parse(fixture('scenarios/tool-guard.json'))
 
-async function runStage(stageId: string) {
+async function runStage(stageId: string, config?: Record<string, unknown>) {
   const composition = toolChat()
-  composition.instances = composition.instances.map(instance => instance.definitionId === 'tool-guard' ? { ...instance, stageId } : instance)
+  composition.instances = composition.instances.map(instance => instance.definitionId === 'tool-guard'
+    ? { ...instance, stageId, ...config ? { config: config as never } : {} }
+    : instance)
   return run({ composition, scenario: toolGuard(), modelScripts: { calculator: calculator() } })
 }
 
@@ -55,6 +57,12 @@ describe('tool-guard stages (P5-02)', () => {
     expect(toolResult?.data).toMatchObject({ status: 'denied', content: 'Error: add is blocked by policy' })
     const answer = sessionEvents(result).filter(event => event.type === 'assistant/message').at(-1)
     expect(answer?.data).toMatchObject({ text: '这个工具被策略拒绝了' })
+  })
+
+  it('02-deny: the deny list is configurable (CTX-04); an empty list lets the tool run', async () => {
+    const result = await runStage('tool-guard@02-deny', { deny: [] })
+    expect(result.outcome).toBe('completed')
+    expect(sessionEvents(result).find(event => event.type === 'tool/result')?.data).toMatchObject({ status: 'ok', content: '3' })
   })
 })
 

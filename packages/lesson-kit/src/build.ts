@@ -76,6 +76,7 @@ async function buildStage(stage: ExecutableStageDefinition, options: BuildOption
   }
 
   await checkDeclaredRequires(stage)
+  await checkConfigSchema(stage, files[0]!.content)
   const modulePath = toPosix(relative(options.repoRoot, outfile))
   const moduleHash = sha256(await readFile(outfile, 'utf8'))
   return { definition: { ...stage, module: modulePath, sourceHash }, modulePath, moduleHash, files, sourceRefs }
@@ -95,6 +96,19 @@ async function checkDeclaredRequires(stage: ExecutableStageDefinition) {
   const listed = [...stage.requires].sort()
   if (actual.join(',') !== listed.join(',')) {
     throw new LessonBuildError(`stage ${stage.id} injects [${actual.join(', ')}] but the catalog lists requires [${listed.join(', ')}]`)
+  }
+}
+
+/**
+ * A stage that takes config declares a Config schema (CTX-04): the runner
+ * refuses every key of a stage without one, so a config interface with no
+ * schema would make all of its options unusable.
+ */
+async function checkConfigSchema(stage: ExecutableStageDefinition, entrySource: string) {
+  if (!/export interface Config\b/.test(entrySource)) return
+  const module = await import(pathToFileURL(stage.module).href) as { Config?: unknown; default?: { Config?: unknown } }
+  if (!module.Config && !module.default?.Config) {
+    throw new LessonBuildError(`stage ${stage.id} declares interface Config but exports no Config schema`)
   }
 }
 

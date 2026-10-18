@@ -4,6 +4,7 @@
  * outer audit still sees the denial on its way back out.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type {} from '../../../tools/stages/main/index.ts'
 import { checkpoint } from '../../../shared/checkpoint.ts'
 
@@ -14,8 +15,13 @@ export interface Config {
   deny?: string[]
 }
 
+/** Missing keys take the schema's defaults before apply sees the config. */
+export const Config: z<Config> = z.object({
+  deny: z.array(z.string()).default(['add']),
+})
+
 export function apply(ctx: Context, config: Config = {}) {
-  const deny = new Set(config.deny ?? ['add'])
+  const deny = new Set(config.deny)
 
   // lesson:audit
   ctx.on('tools/pre-execute', async (exec, next) => {

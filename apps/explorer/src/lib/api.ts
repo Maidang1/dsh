@@ -69,18 +69,27 @@ export class ApiError extends Error {
   }
 }
 
+/** The local service could not be reached at all (fetch rejected). */
+export class NetworkError extends Error {
+  override name = 'NetworkError'
+}
+
 async function request<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const { json, ...rest } = init
   const response = await fetch(path, {
     ...rest,
     headers: { ...json !== undefined ? { 'content-type': 'application/json' } : {}, ...rest.headers },
     ...json !== undefined ? { body: JSON.stringify(json) } : {},
+  }).catch((error: unknown) => {
+    throw new NetworkError(error instanceof Error ? error.message : String(error))
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { error?: { message?: string } } | null
     throw new ApiError(response.status, body?.error?.message ?? response.statusText)
   }
-  return response.json() as Promise<T>
+  return response.json().catch(() => {
+    throw new ApiError(502, `${path} did not answer with JSON`)
+  }) as Promise<T>
 }
 
 export const api = {
@@ -116,10 +125,6 @@ export interface StreamHandlers {
   onConnection(connected: boolean): void
 }
 
-/**
- * Subscribe to a run over SSE. EventSource reconnects by itself and sends the
- * last seq as Last-Event-ID, so the server only resends the missing tail.
- */
 /** Runtime state only, so a tab notices runs started or settled by another tab. */
 export function subscribeState(onState: (state: RuntimeState) => void): () => void {
   const source = new EventSource('/api/events?stateOnly=1')
@@ -127,6 +132,10 @@ export function subscribeState(onState: (state: RuntimeState) => void): () => vo
   return () => source.close()
 }
 
+/**
+ * Subscribe to a run over SSE. EventSource reconnects by itself and sends the
+ * last seq as Last-Event-ID, so the server only resends the missing tail.
+ */
 export function subscribeRun(runId: string | null, handlers: StreamHandlers): () => void {
   const source = new EventSource(`/api/events${runId ? `?runId=${encodeURIComponent(runId)}` : ''}`)
   source.addEventListener('open', () => handlers.onConnection(true))

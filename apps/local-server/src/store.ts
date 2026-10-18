@@ -362,8 +362,9 @@ export class RunStore {
 
   /** Pinned runs are never removed by automatic retention. */
   async setPinned(runId: string, pinned: boolean) {
-    await this.getManifest(runId)
     await this.exclusive('pins', async () => {
+      // Checked under the lock: deleteRun removes its pin under the same lock, after the run is gone.
+      await this.getManifest(runId)
       const pins = await this.pinnedRuns()
       if (pinned) pins.add(runId)
       else pins.delete(runId)
@@ -390,13 +391,10 @@ export class RunStore {
   async deleteRun(runId: string) {
     await this.getManifest(runId)
     await rm(this.path('runs', safeName(runId)), { recursive: true, force: true })
-    const pins = await this.pinnedRuns()
-    if (pins.has(runId)) {
-      await this.exclusive('pins', async () => {
-        const current = await this.pinnedRuns()
-        if (current.delete(runId)) await this.writeJson(this.path('pins.json'), [...current].sort())
-      })
-    }
+    await this.exclusive('pins', async () => {
+      const pins = await this.pinnedRuns()
+      if (pins.delete(runId)) await this.writeJson(this.path('pins.json'), [...pins].sort())
+    })
   }
 
   /** Remove payloads no remaining run trace refers to. Unsafe while a run is being written. */

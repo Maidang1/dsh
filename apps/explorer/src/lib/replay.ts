@@ -4,6 +4,7 @@ import { ReplayIndex, emptySnapshot } from '@harness-explorer/trace/browser'
 import type { ViewSnapshot } from '@harness-explorer/trace/browser'
 import type { ModelRequestPayload } from '@harness-explorer/contracts'
 import type { RunData } from './store'
+import { settleIndex } from './compare'
 
 export interface Replay {
   index: ReplayIndex | null
@@ -42,8 +43,8 @@ export function useReplay(data: RunData | undefined, cursor: number | null): Rep
   )
   const lastSeq = count - 1
   // By default show the scenario's final state, before settlement unloads everything.
-  const settleSeq = data?.records.find(record => record.name === 'run/settle')?.seq
-  const seq = cursor === null ? (settleSeq !== undefined ? settleSeq - 1 : lastSeq) : Math.min(cursor, lastSeq)
+  const settle = data ? settleIndex(data.records) : -1
+  const seq = cursor === null ? (settle >= 0 ? data!.records[settle]!.seq - 1 : lastSeq) : Math.min(cursor, lastSeq)
   // The index object is reused across batches, so `count` keys the projection too.
   const snapshot = useMemo(() => (index && seq >= 0 ? index.at(seq) : emptySnapshot()), [index, seq, count])
   return { index, lastSeq, seq, snapshot }

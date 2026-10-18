@@ -87,8 +87,9 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
   // same stage id and, from its manifest, the same sourceHash (docs/02 §11).
   const selected = state.selectedRunId ? state.runData[state.selectedRunId] : undefined
   const runStage = selected?.revision?.composition.instances.find(instance => instance.definitionId === lesson.pluginDefinitionId)?.stageId
+  // A run that just started may not be in the list yet; only a recorded, different hash means other code.
   const ranHash = state.runs.find(run => run.runId === selected?.runId)?.loadedSourceHashes[stage.codeStageId]
-  const otherCode = runStage === stage.codeStageId && ranHash !== stage.sourceHash
+  const otherCode = runStage === stage.codeStageId && ranHash !== undefined && ranHash !== stage.sourceHash
   const runMatches = runStage === stage.codeStageId && !otherCode
   const replay = useReplay(runMatches ? selected : undefined, null)
   const busy = state.runtime !== null && state.runtime.phase !== 'idle'
@@ -114,7 +115,8 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
   const locate = (ref: SourceRef) => {
     setFileKey(view.files.find(item => item.path === ref.path)!.key)
     setPane('code')
-    setLocated(ref)
+    // A fresh object, so locating the same anchor again scrolls again.
+    setLocated({ ...ref })
   }
   useEffect(() => {
     if (!located) return

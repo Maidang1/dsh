@@ -205,11 +205,14 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         const storage = await api.storage().catch(() => null)
         const progress = await api.progress().catch(() => ({ lessons: {} }))
         set({ ready: true, catalog, compositions, runtime, runs, draft, lessons, environment, storage, progress })
+        // Compare with what this stream saw last: the run stream also writes `runtime`, so the store may already hold `next`.
+        let before: RuntimeState | null = runtime
         stopStateWatch ??= subscribeState((next) => {
-          const before = get().runtime
+          const seen = before
+          before = next
           set({ runtime: next })
           // A run started or settled elsewhere (another tab, a lesson page) appears in the list without a reload.
-          if (next.runId !== before?.runId || (next.phase === 'idle') !== (before?.phase === 'idle')) {
+          if (next.runId !== seen?.runId || (next.phase === 'idle') !== (seen?.phase === 'idle')) {
             void get().refreshRuns().catch(() => {})
           }
         })

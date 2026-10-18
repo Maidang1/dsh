@@ -3,16 +3,21 @@
  * execution process and session records, each read from the recorded trace
  * up to the scenario's end. Nothing here infers what was not recorded.
  */
-import { ReplayIndex } from '@harness-explorer/trace/browser'
+import { replayAll } from '@harness-explorer/trace/browser'
 import type { ViewRegistration } from '@harness-explorer/trace/browser'
 import type { JsonValue, TraceRecord } from '@harness-explorer/contracts'
 import type { RunData } from './store'
 
 type Trace = Pick<RunData, 'records' | 'payloads'>
 
-/** Records of the scenario itself; settlement (unloading everything) is left out. */
+/** Index of the run/settle record: what follows is settlement (unloading everything), not the scenario. */
+export function settleIndex(records: readonly TraceRecord[]): number {
+  return records.findIndex(record => record.name === 'run/settle')
+}
+
+/** Records of the scenario itself. */
 export function scenarioRecords(data: Trace): readonly TraceRecord[] {
-  const settle = data.records.findIndex(record => record.name === 'run/settle')
+  const settle = settleIndex(data.records)
   return settle < 0 ? data.records : data.records.slice(0, settle)
 }
 
@@ -28,9 +33,7 @@ export interface RegistryChange {
 /** Registrations at the end of each scenario: added, removed, or with other details. */
 export function registryDiff(a: Trace, b: Trace): RegistryChange[] {
   const at = (data: Trace) => {
-    const records = scenarioRecords(data)
-    if (!records.length) return {}
-    return new ReplayIndex(records, ref => data.payloads[ref]!).at(records.length - 1).registrations
+    return replayAll(scenarioRecords(data), ref => data.payloads[ref]!).registrations
   }
   const before = at(a)
   const after = at(b)

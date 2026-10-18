@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { RunManifest } from '@harness-explorer/contracts'
 import { diffLines, requestsOf } from '@/lib/replay'
 import { processLines, registryDiff, sessionLines } from '@/lib/compare'
-import type { RequestEntry } from '@/lib/replay'
+import type { DiffLine, RequestEntry } from '@/lib/replay'
 import type { RunData } from '@/lib/store'
 
 interface Props {
@@ -19,9 +19,7 @@ interface Props {
   onCompareRun(runId: string | null): void
 }
 
-function Diff({ before, after, showSame = false }: { before: string; after: string; showSame?: boolean }) {
-  const lines = diffLines(before, after)
-  if (!showSame && lines.every(line => line.kind === 'same')) return <p className="muted">无差异</p>
+function DiffView({ lines }: { lines: readonly DiffLine[] }) {
   return (
     <pre className="diff">
       {lines.map((line, index) => (
@@ -35,15 +33,41 @@ function Diff({ before, after, showSame = false }: { before: string; after: stri
   )
 }
 
-/** Large sections start collapsed behind a summary of how much changed. */
+function Diff({ before, after }: { before: string; after: string }) {
+  const lines = diffLines(before, after)
+  if (lines.every(line => line.kind === 'same')) return <p className="muted">无差异</p>
+  return <DiffView lines={lines} />
+}
+
+/** The line diff keeps a before × after table; past this many cells a section lists both sides instead of aligning them. */
+const MAX_DIFF_CELLS = 2_000_000
+
+/**
+ * Sections start collapsed. Whole-trace lines can be long, so the diff is only
+ * computed once a section is opened, and only while it stays affordable.
+ */
 function Section({ title, before, after }: { title: string; before: string[]; after: string[] }) {
-  const lines = diffLines(before.join('\n'), after.join('\n'))
-  const added = lines.filter(line => line.kind === 'added').length
-  const removed = lines.filter(line => line.kind === 'removed').length
+  const [open, setOpen] = useState(false)
+  const identical = useMemo(() => before.length === after.length && before.every((line, index) => line === after[index]), [before, after])
+  const affordable = before.length * after.length <= MAX_DIFF_CELLS
+  const lines = useMemo(
+    () => (open && !identical && affordable ? diffLines(before.join('\n'), after.join('\n')) : null),
+    [open, identical, affordable, before, after],
+  )
+  const added = lines?.filter(line => line.kind === 'added').length ?? 0
+  const removed = lines?.filter(line => line.kind === 'removed').length ?? 0
+  const status = identical ? '无差异' : lines ? `新增 ${added} 行，删除 ${removed} 行` : affordable ? '有差异，展开查看' : '有差异，行数过多，不逐行对齐'
   return (
-    <details className="run-diff__section">
-      <summary>{title}：{added || removed ? `新增 ${added} 行，删除 ${removed} 行` : '无差异'}（共 {after.length} 行）</summary>
-      <Diff before={before.join('\n')} after={after.join('\n')} showSame />
+    <details className="run-diff__section" onToggle={event => setOpen((event.currentTarget as HTMLDetailsElement).open)}>
+      <summary>{title}：{status}（A {before.length} 行，B {after.length} 行）</summary>
+      {!open ? null : identical ? <DiffView lines={after.map(text => ({ kind: 'same' as const, text }))} /> : lines ? <DiffView lines={lines} /> : (
+        <>
+          <h4>A</h4>
+          <DiffView lines={before.map(text => ({ kind: 'removed' as const, text }))} />
+          <h4>B</h4>
+          <DiffView lines={after.map(text => ({ kind: 'added' as const, text }))} />
+        </>
+      )}
     </details>
   )
 }

@@ -2,7 +2,7 @@
  * Error messages name the action that failed, the reason the server gave,
  * and something the learner can do next (docs/01 §10).
  */
-import { ApiError } from './api'
+import { ApiError, NetworkError } from './api'
 
 const ACTIONS = {
   load: '加载实验台',
@@ -20,7 +20,8 @@ const ACTIONS = {
 
 export type FailedAction = keyof typeof ACTIONS
 
-function recovery(action: FailedAction, status: number | null): string {
+function recovery(action: FailedAction, status: number | 'page' | null): string {
+  if (status === 'page') return '页面内部出错：刷新页面后重试，本地服务与运行记录不受影响。'
   if (status === null) return '本地服务没有响应：确认终端里的 pnpm explorer 仍在运行，然后刷新页面。'
   if (status === 401 || status === 403) return '会话无效：用终端打印的启动链接重新打开页面。'
   if (status === 409) {
@@ -40,8 +41,10 @@ function recovery(action: FailedAction, status: number | null): string {
 }
 
 export function describeFailure(action: FailedAction, error: unknown): string {
-  // fetch rejects with a TypeError when the service is unreachable; an unreadable import file is a SyntaxError.
-  const status = error instanceof ApiError ? error.status : error instanceof TypeError ? null : error instanceof SyntaxError ? 400 : 500
+  // Responses that are not JSON arrive as ApiError, so a SyntaxError here comes from reading an import file.
+  const status = error instanceof ApiError ? error.status
+    : error instanceof NetworkError ? null
+      : action === 'importRun' && error instanceof SyntaxError ? 400 : 'page'
   const reason = error instanceof Error ? error.message : String(error)
   return `${ACTIONS[action]}失败。原因：${reason}。${recovery(action, status)}`
 }

@@ -82,7 +82,7 @@ export const BuiltStage = z.object({
   definition: ExecutableStageDefinition,
   /** Repository-relative module path; the server resolves it against the build directory. */
   modulePath: Id,
-  /** sha256 of the bundled module, checked before every run (docs/02 §2). Absent in builds that predate it. */
+  /** sha256 of the bundled module, checked before every run (docs/02 §2). Builds that predate it parse but are refused at run time until rebuilt. */
   moduleHash: Id.optional(),
   files: z.array(CodeFile),
   sourceRefs: z.array(SourceRef),

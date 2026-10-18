@@ -1,6 +1,6 @@
 /** docs/01 §10: an error names the failed action, the reason, and what to do next. */
 import { describe, expect, it } from 'vitest'
-import { ApiError } from '../src/lib/api'
+import { ApiError, NetworkError } from '../src/lib/api'
 import { describeFailure } from '../src/lib/errors'
 
 describe('error messages', () => {
@@ -11,7 +11,8 @@ describe('error messages', () => {
     ['an import file that is not JSON', 'importRun', new SyntaxError('Unexpected token'), '不是有效的运行导出'],
     ['an expired session', 'saveDraft', new ApiError(401, 'open the launch URL'), '用终端打印的启动链接重新打开'],
     ['a lesson build older than the source', 'run', new ApiError(412, 'the source of stage x changed after the lesson build'), '在终端运行 pnpm lessons:build'],
-    ['an unreachable service', 'openRun', new TypeError('Failed to fetch'), 'pnpm explorer 仍在运行'],
+    ['an unreachable service', 'openRun', new NetworkError('Failed to fetch'), 'pnpm explorer 仍在运行'],
+    ['a bug in the page, not the service', 'openRun', new TypeError("Cannot read properties of undefined (reading 'seq')"), '页面内部出错'],
   ] as const)('%s', (_name, action, error, text) => {
     expect(describeFailure(action, error)).toContain(text)
   })
