@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.explorer/
+*.tsbuildinfo
+coverage/
