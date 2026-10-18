@@ -66,6 +66,22 @@ export function compositionForMode(composition: Composition, mode: AdapterMode):
   }
 }
 
+/**
+ * Cordis validates values against a stage's `Config` schema but keeps keys the
+ * schema does not name. A teaching subset must refuse those instead (docs/02
+ * §8): an upstream option or a typo would otherwise be silently ignored.
+ */
+function checkConfigKeys(instance: PluginInstance, plugin: Plugin) {
+  const schema = (plugin as { Config?: { type?: string; dict?: Record<string, unknown> } }).Config
+  if (schema && (schema.type !== 'object' || !schema.dict)) return
+  const supported = Object.keys(schema?.dict ?? {})
+  const given = instance.config && typeof instance.config === 'object' && !Array.isArray(instance.config) ? Object.keys(instance.config) : []
+  const unsupported = given.filter(key => !supported.includes(key))
+  if (unsupported.length) {
+    throw new CompositionError(`instance "${instance.id}" (${instance.stageId}) does not support config ${unsupported.map(key => `"${key}"`).join(', ')}; supported: ${supported.join(', ') || 'none'}`)
+  }
+}
+
 export class CompositionError extends Error {
   override name = 'CompositionError'
 }
@@ -144,6 +160,7 @@ export async function runScenario(input: RunInput): Promise<RunResult> {
   const plugins = new Map<string, Plugin>()
   for (const instance of composition.instances) {
     if (!plugins.has(instance.stageId)) plugins.set(instance.stageId, await loadStage(stageById.get(instance.stageId)!))
+    checkConfigKeys(instance, plugins.get(instance.stageId)!)
   }
 
   const root = new Context()

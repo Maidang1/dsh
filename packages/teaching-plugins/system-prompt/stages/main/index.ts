@@ -10,6 +10,7 @@
  * tool ordering config, the `system-prompt/assemble` waterfall.
  */
 import { Context, Service } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import { ROOT_SCOPE, scopeChainOf } from '../../../shared/scope.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -54,6 +55,11 @@ function compareSections(a: PromptSection, b: PromptSection) {
 }
 
 export class SystemPrompt extends Service {
+  // Upstream's other options (identity, runtime context, tool order) are not taught; the runner rejects them.
+  static Config: z<Config> = z.object({
+    persona: z.string(),
+  })
+
   private readonly layers = new Map<string, Map<string, SectionEntry>>()
   private readonly toolProviders = new Set<() => ToolSchema[]>()
 

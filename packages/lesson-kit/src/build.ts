@@ -40,7 +40,7 @@ async function buildStage(stage: ExecutableStageDefinition, options: BuildOption
     format: 'esm',
     platform: 'node',
     target: 'node22',
-    external: ['@deepseek-ai/cordis'],
+    external: ['@deepseek-ai/cordis', '@deepseek-ai/schemastery'],
     metafile: true,
     sourcemap: 'linked',
     logLevel: 'silent',

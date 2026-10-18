@@ -4,6 +4,7 @@
  * prerecorded trace. A request no rule matches fails the scenario.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type { ModelScript, ModelScriptRule } from '@harness-explorer/contracts'
 import type { ModelChunk, ModelRequest } from '../../../llm/stages/main/index.ts'
 
@@ -14,6 +15,11 @@ export class ScriptMismatchError extends Error {
 export interface Config {
   script: ModelScript
 }
+
+/** The runner injects the scenario's script, already parsed against the ModelScript contract. */
+export const Config: z<Config> = z.object({
+  script: z.any().required(),
+})
 
 function matches(rule: ModelScriptRule, request: ModelRequest): boolean {
   const { match } = rule

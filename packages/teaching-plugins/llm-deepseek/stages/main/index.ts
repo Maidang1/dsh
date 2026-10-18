@@ -12,6 +12,7 @@
  * attribution headers, model catalogue. The key never enters config or traces.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type { HistoryMessage } from '../../../session/stages/main/index.ts'
 import type { ModelChunk, ModelRequest } from '../../../llm/stages/main/index.ts'
 
@@ -26,6 +27,11 @@ export interface Config {
   model?: string
   maxTokens?: number
 }
+
+export const Config: z<Config> = z.object({
+  model: z.string(),
+  maxTokens: z.natural(),
+})
 
 /** Same rule as upstream messagesApiRoot: append /v1 unless already present. */
 export function messagesApiRoot(baseURL: string) {

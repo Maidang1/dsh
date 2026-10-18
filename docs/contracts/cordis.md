@@ -18,6 +18,12 @@
 - 期望：在嵌套作用域注册的内容不影响兄弟或外层作用域的组装。
 - 验证：`prompt-contract.spec.ts`「PROMPT-03」覆盖提示词层；`cordis-baseline.spec.ts`「CTX-03 probe」覆盖服务级 `ctx.isolate`：兄弟作用域各自解析自己的提供者，未提供的一侧保持 pending。状态：verified。
 
+### CTX-04 插件配置
+
+- 上游：`vendor/cordis/src/fiber.ts` 的 `resolveConfig`（apply 前按 `Config['~standard']` 校验）；`packages/core/system-prompt/src/index.ts:430` 的 `SystemPrompt.Config`。
+- 期望：带配置的阶段导出 schemastery `Config`，Cordis 在 apply 前校验，值类型不符时实例进入 failed（ValidationError）；配置中出现 schema 未列出的键（拼写错误、教学版不支持的上游选项、无配置阶段收到任何键）时，运行器在挂载任何实例前以 CompositionError 拒绝运行。
+- 验证：`packages/teaching-runtime/tests/config-contract.spec.ts`。状态：verified。
+
 ### LIFE-01 卸载贡献插件
 
 - 上游：`fiber.ts` 的 `effect()` 与 `dispose`。

@@ -13,6 +13,7 @@
  * `sessionProjections` too; this subset has no agent registry or projections.
  */
 import { Context, Service } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type { ModelRequest } from '../../../llm/stages/main/index.ts'
 import { renderPrompt } from '../../../system-prompt/stages/main/index.ts'
 import type { PromptAssembly } from '../../../system-prompt/stages/main/index.ts'
@@ -54,6 +55,10 @@ export interface Config {
 
 export class AgentLoop extends Service {
   static inject = ['sessions', 'llm', 'tools', 'systemPrompt']
+  static Config: z<Config> = z.object({
+    sessionScopes: z.dict(z.array(z.string())),
+    maxSteps: z.natural(),
+  })
 
   private readonly turns = new Map<string, number>()
   private requestCounter = 0

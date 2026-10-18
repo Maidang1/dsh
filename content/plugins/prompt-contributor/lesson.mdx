@@ -14,6 +14,8 @@ Cordis 插件可以只是一个带 `apply` 的对象。挂载后实例进入 `ac
 
 `section()` 接收名称、顺序和文本。片段按 `order` 从小到大排列，相同 `order` 按名称排序，然后用空行连接。同一作用域里再次注册同名片段会抛错，而不是悄悄覆盖。
 
+这一阶段也导出了 `Config`：和上游 `SystemPrompt.Config` 一样用 schemastery 描述配置，Cordis 在 `apply` 之前按它校验，类型不对时插件进入 failed。教学运行器还会拒绝 schema 没有列出的配置项，避免拼错的名字或教学版不支持的上游选项被悄悄忽略。
+
 ## 03 卸载时的清理
 
 插件代码里没有任何清理逻辑。`section()` 在调用方插件的上下文里创建 Cordis effect，返回的 disposer 属于这个插件；卸载插件时 Cordis 逆序执行它的 effect，片段随之移除。

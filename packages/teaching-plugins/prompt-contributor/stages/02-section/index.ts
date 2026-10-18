@@ -4,6 +4,7 @@
  * the section without any cleanup code here.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type {} from '../../../system-prompt/stages/main/index.ts'
 
 export const name = 'prompt-contributor'
@@ -15,6 +16,13 @@ export interface Config {
   order?: number
   text?: string
 }
+
+/** Cordis validates the instance config against this before apply runs. */
+export const Config: z<Config> = z.object({
+  name: z.string(),
+  order: z.number(),
+  text: z.string(),
+})
 
 export function apply(ctx: Context, config: Config = {}) {
   // lesson:section
