@@ -74,7 +74,10 @@ export function compositionForMode(composition: Composition, mode: AdapterMode):
 function checkConfigKeys(instance: PluginInstance, plugin: Plugin) {
   const schema = (plugin as { Config?: { type?: string; dict?: Record<string, unknown> } }).Config
   if (schema && (schema.type !== 'object' || !schema.dict)) return
-  const supported = Object.keys(schema?.dict ?? {})
+  checkSupportedKeys(instance, Object.keys(schema?.dict ?? {}))
+}
+
+function checkSupportedKeys(instance: PluginInstance, supported: readonly string[]) {
   const given = instance.config && typeof instance.config === 'object' && !Array.isArray(instance.config) ? Object.keys(instance.config) : []
   const unsupported = given.filter(key => !supported.includes(key))
   if (unsupported.length) {
@@ -109,6 +112,8 @@ export function validateComposition(composition: Composition, scenario: Scenario
       throw new CompositionError(`instance "${instance.id}" stage "${stage.id}" belongs to "${stage.pluginDefinitionId}", not "${instance.definitionId}"`)
     }
     if (!scopeIds.has(instance.scopeId)) throw new CompositionError(`instance "${instance.id}" uses unknown scope "${instance.scopeId}"`)
+    // Built stages carry their config keys, so a draft is refused before it becomes a revision.
+    if (stage.configKeys) checkSupportedKeys(instance, stage.configKeys)
   }
   for (const instance of composition.instances) {
     if (instance.parentId !== null && !instanceIds.has(instance.parentId)) {

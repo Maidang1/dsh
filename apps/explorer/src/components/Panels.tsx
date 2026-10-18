@@ -291,6 +291,11 @@ export function PluginLibrary({ stages, responsibilities, draft, onAdd }: Librar
               <li key={latest.pluginDefinitionId}>
                 <strong>{latest.pluginDefinitionId}</strong> <span className="muted">{latest.id} · {responsibilityLabel(responsibilities[latest.pluginDefinitionId])}</span>
                 <div className="muted">需要：{latest.requires.join('、') || '无'} · 提供：{latest.provides.join('、') || '无'}</div>
+                <div className="muted">
+                  阶段：{stages.filter(stage => stage.pluginDefinitionId === latest.pluginDefinitionId).map(stage => stage.id.split('@')[1]).join('、')}
+                  {latest.configKeys ? ` · 配置项：${latest.configKeys.join('、') || '无'}` : ''}
+                  {' · 来源：'}{latest.origin === 'teaching' ? '教学精简实现' : `上游 ${latest.upstreamCommit?.slice(0, 8)}`}
+                </div>
                 {missing.length ? (
                   <div className="warning-text">
                     根作用域缺少：{missing.join('、')}（只添加此插件时，实例会停在等待状态）

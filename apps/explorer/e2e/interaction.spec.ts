@@ -107,6 +107,8 @@ test('filters the plugin library by responsibility', async ({ page }) => {
   await expect(names).toHaveText(['tools', 'calculator'])
   await filter.getByRole('button', { name: '事件策略' }).click()
   await expect(names).toHaveText(['tool-guard'])
+  // docs/01 §5.1: an entry shows its stages, config and source.
+  await expect(page.locator('.library__list li').filter({ hasText: 'tool-guard' })).toContainText('阶段：00-observe、01-two-layers、02-deny · 配置项：deny · 来源：教学精简实现')
   await filter.getByRole('button', { name: '全部' }).click()
   await expect(names).toHaveCount(10)
 })

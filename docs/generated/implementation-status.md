@@ -2,7 +2,7 @@
 
 按 `04-implementation-plan.md` §11 记录每个任务的完成情况：交付位置、验收依据（测试与契约）、未支持的边界。上游版本均为 `687f282e8625c6b8d11ff58211a90524be2e4317`。更新于 2026-10-18，对应提交 `e4f8f7f` 之后。
 
-验证命令：`pnpm typecheck`、`pnpm test`（183 个用例）、`pnpm lessons:build`、`pnpm lessons:verify`、`pnpm lessons:verify-upstream`、`pnpm build:ui`、`pnpm test:e2e`（31 个用例）。
+验证命令：`pnpm typecheck`、`pnpm test`（184 个用例）、`pnpm lessons:build`、`pnpm lessons:verify`、`pnpm lessons:verify-upstream`、`pnpm build:ui`、`pnpm test:e2e`（31 个用例）。
 
 ## P0 依据与技术验证
 
@@ -38,7 +38,7 @@
 |---|---|---|---|---|
 | P3-00 本地 API 客户端 | 完成 | `apps/explorer/src/lib/api.ts`、SSE 重连、所有标签页订阅运行状态（其他标签页的运行出现在列表中，可观看） | `workbench.spec.ts`（刷新后保留运行） | — |
 | P3-01 插件树 | 完成 | 组合、依赖、运行数据三个图层，文本列表视图；状态区分未启用、等待服务、原因未知、加载失败、无活动 Fiber，检查器给出修复入口 | `workbench.spec.ts`、`phase.spec.ts`、`interaction.spec.ts` | 依赖图层只有 declared/resolved，没有 observed 边 |
-| P3-02 添加插件与实验版本 | 完成 | 插件库（按职责筛选、缺失服务与提供者、“同时添加依赖”）、移除前列出受影响消费者与注册项、草稿乐观并发（同一标签页的连续编辑依次保存，运行前等待未完成的保存）、不可变 revision | `controller.spec.ts`、`server.spec.ts`、`apps/explorer/tests/library.spec.ts`、`interaction.spec.ts` | 依赖只在根作用域解析 |
+| P3-02 添加插件与实验版本 | 完成 | 插件库（按职责筛选、显示阶段/配置项/来源、缺失服务与提供者、“同时添加依赖”）、移除前列出受影响消费者与注册项、草稿乐观并发（同一标签页的连续编辑依次保存，运行前等待未完成的保存）、不可变 revision | `controller.spec.ts`、`server.spec.ts`、`apps/explorer/tests/library.spec.ts`、`interaction.spec.ts` | 依赖只在根作用域解析 |
 | P3-03 时间线与回放 | 完成 | 虚拟化列表、键盘操作、状态变化历史、1×/2×/4× 回放播放与暂停；当前记录指向所属实例与本次运行的阶段代码 | `workbench.spec.ts` | — |
 | P3-04 前后对比 | 完成 | 模型请求差异；两次运行间的注册表、执行过程、会话记录差异（截至场景结束，大段先显示摘要）；对照条件含真实模型说明 | `compare.spec.ts`、`workbench.spec.ts` | 执行过程按文本行对齐，不识别分支结构 |
 | P4-01..03 提示词插件闭环 | 完成 | `content/plugins/prompt-contributor`；课程只把同一阶段、同一 sourceHash 的运行结果对应到展示代码，其他版本的运行标明不对应；在整体组合与课程之间切换保留所选运行；内部架构从节点定位到当前阶段的代码锚点，后续阶段引入的模块与关系标为占位，外部服务单独标注 | `lesson.spec.ts`、`lessons:verify` | — |

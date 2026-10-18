@@ -105,3 +105,23 @@ describe('stage integrity before a run (docs/02 §2)', () => {
     }
   })
 })
+
+describe('config keys at commit time (CTX-04)', () => {
+  it('refuses a draft whose config names a key the stage does not support, before any revision exists', async () => {
+    const catalog = { ...loadDevCatalog(), lessons, contentVersion: lessons.contentVersion, stages: lessons.stages.map(stage => ({ ...stage.definition, module: join(repoRoot, stage.modulePath) })) }
+    expect(catalog.stages.find(stage => stage.id === 'system-prompt@main')?.configKeys).toEqual(['persona'])
+    expect(catalog.stages.find(stage => stage.id === 'tools@main')?.configKeys).toEqual([])
+    const store = new RunStore(await mkdtemp(join(tmpdir(), 'explorer-config-')))
+    const composition: Composition = JSON.parse(await readFile(join(repoRoot, 'fixtures/compositions/minimal-chat.json'), 'utf8'))
+    composition.instances = composition.instances.map(instance => (instance.id === 'prompt-contributor' ? { ...instance, config: { txt: '只用一句话' } } : instance))
+    const draft = await store.saveDraft({ id: 'd', parentRevisionId: null, composition, scenarioId: 'prompt-section-lifecycle', seed: 1 }, null)
+    await expect(commitDraft(store, catalog, draft)).rejects.toMatchObject({
+      code: 'invalid',
+      message: expect.stringContaining('does not support config "txt"; supported: name, order, text'),
+    })
+
+    composition.instances = composition.instances.map(instance => (instance.id === 'prompt-contributor' ? { ...instance, config: { text: '只用一句话' } } : instance))
+    const fixed = await store.saveDraft({ ...draft, composition }, draft.version)
+    await expect(commitDraft(store, catalog, fixed)).resolves.toMatchObject({ composition })
+  })
+})

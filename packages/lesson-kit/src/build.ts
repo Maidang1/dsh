@@ -76,10 +76,10 @@ async function buildStage(stage: ExecutableStageDefinition, options: BuildOption
   }
 
   await checkDeclaredRequires(stage)
-  await checkConfigSchema(stage, files[0]!.content)
+  const configKeys = await checkConfigSchema(stage, files[0]!.content)
   const modulePath = toPosix(relative(options.repoRoot, outfile))
   const moduleHash = sha256(await readFile(outfile, 'utf8'))
-  return { definition: { ...stage, module: modulePath, sourceHash }, modulePath, moduleHash, files, sourceRefs }
+  return { definition: { ...stage, module: modulePath, sourceHash, configKeys }, modulePath, moduleHash, files, sourceRefs }
 }
 
 /**
@@ -102,14 +102,17 @@ async function checkDeclaredRequires(stage: ExecutableStageDefinition) {
 /**
  * A stage that takes config declares a Config schema (CTX-04): the runner
  * refuses every key of a stage without one, so a config interface with no
- * schema would make all of its options unusable.
+ * schema would make all of its options unusable. Returns the schema's keys.
  */
-async function checkConfigSchema(stage: ExecutableStageDefinition, entrySource: string) {
-  if (!/export interface Config\b/.test(entrySource)) return
-  const module = await import(pathToFileURL(stage.module).href) as { Config?: unknown; default?: { Config?: unknown } }
-  if (!module.Config && !module.default?.Config) {
+async function checkConfigSchema(stage: ExecutableStageDefinition, entrySource: string): Promise<string[]> {
+  type Schema = { dict?: Record<string, unknown> }
+  const module = await import(pathToFileURL(stage.module).href) as { Config?: Schema; default?: { Config?: Schema } }
+  const schema = module.Config ?? module.default?.Config
+  if (/export interface Config\b/.test(entrySource) && !schema) {
     throw new LessonBuildError(`stage ${stage.id} declares interface Config but exports no Config schema`)
   }
+  // The keys commit-time validation accepts; a stage without a schema takes none.
+  return Object.keys(schema?.dict ?? {})
 }
 
 async function importData(path: string): Promise<unknown> {

@@ -69,6 +69,8 @@ export const ExecutableStageDefinition = z.object({
   sourceHash: Id,
   requires: z.array(Id),
   provides: z.array(Id),
+  /** Config keys the stage's Config schema names, recorded by the lesson build; absent for development stages. */
+  configKeys: z.array(Id).optional(),
   upstreamCommit: Id.nullable(),
 }).refine(stage => stage.origin === 'teaching' || stage.upstreamCommit !== null, {
   message: 'upstream stages must pin an upstreamCommit',
