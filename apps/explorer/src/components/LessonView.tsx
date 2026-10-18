@@ -97,6 +97,9 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
         <Link href="/" className="button">返回组合</Link>
         <h1>{lesson.title}</h1>
         <span className="muted">阶段 {index + 1}/{views.length} · {stage.title}</span>
+        <span className="badge" aria-label="对应运行">
+          {!selected ? '尚无运行' : runMatches ? `运行 ${selected.runId} · 回放 #${replay.seq}（场景结束时）` : `所选运行 ${selected.runId} 未执行此阶段`}
+        </span>
         {stage.kind === 'executable' ? (
           <button
             type="button"

@@ -30,6 +30,18 @@ const OUTCOME_TEXT: Record<string, string> = {
   interrupted: '服务中断',
 }
 
+/**
+ * Which run version and replay position the views show (docs/01 §10), kept in
+ * the header so it stays visible whichever bottom tab is open.
+ */
+export function ReplayPosition({ revisionId, seq, lastSeq, atScenarioEnd }: { revisionId: string | undefined; seq: number; lastSeq: number; atScenarioEnd: boolean }) {
+  return (
+    <span className="badge" aria-label="当前位置">
+      {revisionId ? `版本 ${revisionId} · ` : ''}回放 #{seq} / #{lastSeq}{atScenarioEnd ? '（场景结束时）' : ''}
+    </span>
+  )
+}
+
 export function outcomeText(outcome: string) {
   return OUTCOME_TEXT[outcome] ?? outcome
 }

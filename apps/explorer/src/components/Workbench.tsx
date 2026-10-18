@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useExplorer, shownComposition, instanceById } from '@/lib/store'
 import { phaseHistory, useReplay } from '@/lib/replay'
 import { PluginList, PluginTree } from './PluginTree'
-import { Inspector, PluginLibrary, RunBar, Timeline, outcomeText } from './Panels'
+import { Inspector, PluginLibrary, ReplayPosition, RunBar, Timeline, outcomeText } from './Panels'
 import { RequestDiff } from './RequestDiff'
 import { NarrowTabs, narrowPane } from './NarrowTabs'
 import { affectedConsumers, instancesFor, planAddition } from '@/lib/library'
@@ -94,6 +94,7 @@ export function Workbench() {
             {state.runs.map(run => <option key={run.runId} value={run.runId}>{run.runId} · {outcomeText(run.outcome)}</option>)}
           </select>
         </label>
+        {selected ? <ReplayPosition revisionId={selected.revision?.id} seq={replay.seq} lastSeq={replay.lastSeq} atScenarioEnd={state.cursor === null} /> : null}
         {state.selectedRunId ? (
           <>
             <a className="button" href={`/api/runs/${encodeURIComponent(state.selectedRunId)}/export`} download>导出运行</a>

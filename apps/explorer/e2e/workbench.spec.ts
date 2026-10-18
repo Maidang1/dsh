@@ -30,12 +30,15 @@ test('runs the scenario and replays without re-executing', async () => {
 
   // Default view is the scenario's final state, before settlement unloads everything.
   await expect(page.locator('.react-flow__node').filter({ hasText: 'agent-loop' })).toContainText('已激活')
+  await expect(page.getByLabel('当前位置')).toContainText('（场景结束时）')
 
   const runCount = async () => (await page.getByLabel('查看运行').locator('option').count())
   const before = await runCount()
   await page.getByRole('button', { name: '上一条记录' }).click()
   await page.getByRole('button', { name: '上一条记录' }).click()
   await page.getByRole('slider', { name: '回放位置' }).fill('0')
+  // The position stays visible in the header whichever bottom tab is open.
+  await expect(page.getByLabel('当前位置')).toHaveText(/^版本 rev-\w+ · 回放 #0 \/ #\d+$/)
   await expect(page.locator('.react-flow__node').filter({ hasText: 'agent-loop' })).toContainText('本次运行未加载')
   expect(await runCount()).toBe(before)
 })
