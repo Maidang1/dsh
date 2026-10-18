@@ -40,6 +40,20 @@ test('runs the scenario and replays without re-executing', async () => {
   expect(await runCount()).toBe(before)
 })
 
+test('renders only the visible part of a long trace and follows the cursor', async () => {
+  const total = (await page.request.get('/api/runs').then(response => response.json()))[0].lastSeq + 1
+  const rows = page.locator('.timeline__row')
+  expect(await rows.count()).toBeLessThan(total)
+  await page.getByRole('slider', { name: '回放位置' }).fill('0')
+  await expect(page.locator('.timeline__row.is-current')).toContainText('#0')
+  await page.getByRole('button', { name: '到最新（含结算）' }).click()
+  await expect(page.locator('.timeline__row.is-current')).toContainText(`#${total - 1}`)
+  await page.getByRole('list', { name: /轨迹记录/ }).focus()
+  await page.keyboard.press('ArrowUp')
+  await expect(page.locator('.timeline__row.is-current')).toContainText(`#${total - 2}`)
+  await expect(page.getByText(`回放位置 ${total - 2} /`)).toBeVisible()
+})
+
 test('compares the request before and after the contributor is mounted', async () => {
   await page.getByRole('tab', { name: '请求对比' }).click()
   await page.getByLabel('请求 A').selectOption({ index: 0 })

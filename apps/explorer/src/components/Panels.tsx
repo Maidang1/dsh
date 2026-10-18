@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
+import { TimelineRows } from './TimelineRows'
 import type { AdapterMode, EnvironmentSnapshot, PluginInstance, RuntimeState } from '@harness-explorer/contracts'
 import type { ViewSnapshot } from '@harness-explorer/trace/browser'
 import type { Draft, LessonsResponse, PublicCatalog, PublicStage } from '@/lib/api'
@@ -186,11 +187,20 @@ const KIND_FILTERS = ['全部', 'checkpoint', 'lifecycle', 'session', 'data', 's
 
 export function Timeline({ data, seq, lastSeq, onCursor }: TimelineProps) {
   const [filter, setFilter] = useState<(typeof KIND_FILTERS)[number]>('全部')
+  const count = data?.records.length ?? 0
+  const records = useMemo(
+    () => (data ? (filter === '全部' ? data.records : data.records.filter(record => record.kind === filter)) : []),
+    // Records only grow; their count identifies the contents.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data?.runId, count, filter],
+  )
   if (!data) return <section className="timeline"><p className="muted">还没有运行。点击“运行教学代码”。</p></section>
-  const records = data.records.filter(record => filter === '全部' || record.kind === filter)
   const step = (direction: 1 | -1) => {
-    const candidates = records.filter(record => (direction > 0 ? record.seq > seq : record.seq < seq))
-    const target = direction > 0 ? candidates[0] : candidates.at(-1)
+    // Records are sorted by seq: the first one after the cursor, or the last one before it.
+    const after = records.findIndex(record => record.seq > seq)
+    const end = after < 0 ? records.length : after
+    const before = records[end - 1]?.seq === seq ? end - 2 : end - 1
+    const target = direction > 0 ? records[after] : records[before]
     if (target) onCursor(target.seq)
     else if (direction < 0) onCursor(-1)
   }
@@ -220,20 +230,7 @@ export function Timeline({ data, seq, lastSeq, onCursor }: TimelineProps) {
       </div>
       {data.gaps.length ? <p className="warning-text">轨迹缺口：{data.gaps.map(gap => `${gap.fromSeq}–${gap.toSeq}`).join('，')}，结果不完整。</p> : null}
       {data.settled ? <p className="muted">运行结果：{outcomeText(data.settled.outcome)}，最后序号 {data.settled.finalSeq}</p> : <p className="muted">运行未结算，结果尚不完整。</p>}
-      <ol className="timeline__list">
-        {records.map(record => (
-          <li key={record.seq} className={record.seq === seq ? 'is-current' : record.seq > seq ? 'is-future' : ''}>
-            <button type="button" onClick={() => onCursor(record.seq)}>
-              <span className="timeline__seq">#{record.seq}</span>
-              <span className={`kind kind-${record.kind}`}>{record.kind}</span>
-              <span>{record.name === 'run/settle' ? 'run/settle · 运行结算：逆序卸载全部实例' : record.name}</span>
-              {record.instanceId ? <span className="muted">{record.instanceId}</span> : null}
-              {record.scenarioStepId ? <span className="muted">步骤 {record.scenarioStepId}</span> : null}
-              {record.name === 'session/event' && record.payloadRef ? <span className="muted">{String((data.payloads[record.payloadRef] as { type?: string })?.type)}</span> : null}
-            </button>
-          </li>
-        ))}
-      </ol>
+      <TimelineRows records={records} payloads={data.payloads} seq={seq} onCursor={onCursor} />
     </section>
   )
 }
