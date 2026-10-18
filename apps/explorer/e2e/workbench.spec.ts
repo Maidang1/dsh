@@ -54,6 +54,20 @@ test('renders only the visible part of a long trace and follows the cursor', asy
   await expect(page.getByText(`回放位置 ${total - 2} /`)).toBeVisible()
 })
 
+test('plays the replay at a chosen speed and pauses without running anything', async () => {
+  const runsBefore = (await page.request.get('/api/runs').then(response => response.json())).length
+  const position = async () => Number((await page.getByText(/^回放位置 -?\d+ \//).textContent())!.match(/-?\d+/)![0])
+  await page.getByRole('slider', { name: '回放位置' }).fill('0')
+  await page.getByLabel('速度').selectOption('4')
+  await page.getByRole('button', { name: '播放回放' }).click()
+  await expect.poll(position).toBeGreaterThan(3)
+  await page.getByRole('button', { name: '暂停回放' }).click()
+  const paused = await position()
+  await page.waitForTimeout(400)
+  expect(await position()).toBe(paused)
+  expect((await page.request.get('/api/runs').then(response => response.json())).length).toBe(runsBefore)
+})
+
 test('lists the lifecycle history of an instance and jumps to a transition', async () => {
   await page.getByLabel('列表视图').check()
   await page.getByRole('list', { name: '插件列表' }).getByRole('button', { name: /^prompt-contributor/ }).click()

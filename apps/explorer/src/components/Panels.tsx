@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { TimelineRows } from './TimelineRows'
 import type { AdapterMode, EnvironmentSnapshot, PluginInstance, RuntimeState } from '@harness-explorer/contracts'
 import type { ViewSnapshot } from '@harness-explorer/trace/browser'
@@ -202,6 +202,9 @@ interface TimelineProps {
   onCursor(seq: number | null): void
 }
 
+/** Cursor step interval at 1× playback. */
+const PLAYBACK_MS = 400
+
 const KIND_FILTERS = ['全部', 'checkpoint', 'lifecycle', 'session', 'data', 'service', 'diagnostic'] as const
 
 export function Timeline({ data, seq, lastSeq, onCursor }: TimelineProps) {
@@ -213,7 +216,26 @@ export function Timeline({ data, seq, lastSeq, onCursor }: TimelineProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data?.runId, count, filter],
   )
+  // Replay playback only moves the cursor; it never runs plugins or changes logicalTime.
+  const [playing, setPlaying] = useState(false)
+  const [speed, setSpeed] = useState(1)
+  useEffect(() => {
+    if (!playing) return
+    const timer = setInterval(() => {
+      const next = records.find(record => record.seq > seq)
+      if (next) onCursor(next.seq)
+      else setPlaying(false)
+    }, PLAYBACK_MS / speed)
+    return () => clearInterval(timer)
+  }, [playing, speed, records, seq, onCursor])
+  useEffect(() => setPlaying(false), [data?.runId])
+
   if (!data) return <section className="timeline"><p className="muted">还没有运行。点击“运行教学代码”。</p></section>
+  const togglePlayback = () => {
+    if (playing) return setPlaying(false)
+    if (!records.some(record => record.seq > seq)) onCursor(-1)
+    setPlaying(true)
+  }
   const step = (direction: 1 | -1) => {
     // Records are sorted by seq: the first one after the cursor, or the last one before it.
     const after = records.findIndex(record => record.seq > seq)
@@ -226,6 +248,13 @@ export function Timeline({ data, seq, lastSeq, onCursor }: TimelineProps) {
   return (
     <section className="timeline" aria-label="执行轨迹">
       <div className="timeline__controls">
+        <button type="button" onClick={togglePlayback} aria-pressed={playing}>{playing ? '暂停回放' : '播放回放'}</button>
+        <label>
+          速度
+          <select value={speed} onChange={event => setSpeed(Number(event.target.value))}>
+            {[1, 2, 4].map(value => <option key={value} value={value}>{value}×</option>)}
+          </select>
+        </label>
         <button type="button" onClick={() => step(-1)} aria-label="上一条记录">上一步</button>
         <button type="button" onClick={() => step(1)} aria-label="下一条记录">下一步</button>
         <button type="button" onClick={() => onCursor(null)}>场景结束时</button>
