@@ -3,23 +3,15 @@
  * execution process and session records, each read from the recorded trace
  * up to the scenario's end. Nothing here infers what was not recorded.
  */
-import { replayAll } from '@harness-explorer/trace/browser'
+import { replayAll, scenarioPart } from '@harness-explorer/trace/browser'
 import type { ViewRegistration } from '@harness-explorer/trace/browser'
 import type { JsonValue, TraceRecord } from '@harness-explorer/contracts'
 import type { RunData } from './store'
 
 type Trace = Pick<RunData, 'records' | 'payloads'>
 
-/** Index of the run/settle record: what follows is settlement (unloading everything), not the scenario. */
-export function settleIndex(records: readonly TraceRecord[]): number {
-  return records.findIndex(record => record.name === 'run/settle')
-}
-
-/** Records of the scenario itself. */
-export function scenarioRecords(data: Trace): readonly TraceRecord[] {
-  const settle = settleIndex(data.records)
-  return settle < 0 ? data.records : data.records.slice(0, settle)
-}
+/** Records of the scenario itself; settlement (unloading everything) is left out. */
+export const scenarioRecords = (data: Trace): readonly TraceRecord[] => scenarioPart(data.records)
 
 const payload = (data: Trace, record: TraceRecord) => (record.payloadRef ? data.payloads[record.payloadRef] : undefined)
 const compact = (value: JsonValue | undefined) => (value === undefined ? '' : ` ${JSON.stringify(value)}`)

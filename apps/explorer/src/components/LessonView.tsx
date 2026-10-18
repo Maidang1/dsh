@@ -11,6 +11,7 @@ import type { ArchitectureNode, BuiltLesson } from '@harness-explorer/lesson-kit
 import type { ModelRequestPayload, SourceRef } from '@harness-explorer/contracts'
 import type { LessonStageView } from '@/lib/lesson-data'
 import { useReplay } from '@/lib/replay'
+import { recordedCheckpoints } from '@harness-explorer/trace/browser'
 import { useExplorer } from '@/lib/store'
 import { LessonCode } from './CodePanel'
 import { phaseOf } from './PluginTree'
@@ -105,10 +106,10 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
   // same stage id and, from its manifest, the same sourceHash (docs/02 §11).
   const selected = state.selectedRunId ? state.runData[state.selectedRunId] : undefined
   const runStage = selected?.revision?.composition.instances.find(instance => instance.definitionId === lesson.pluginDefinitionId)?.stageId
-  // A run that just started may not be in the list yet; only a recorded, different hash means other code.
-  const ranHash = state.runs.find(run => run.runId === selected?.runId)?.loadedSourceHashes[stage.codeStageId]
-  const otherCode = runStage === stage.codeStageId && ranHash !== undefined && ranHash !== stage.sourceHash
-  const runMatches = runStage === stage.codeStageId && !otherCode
+  // The run's own manifest says which code it ran; a run without a recorded hash for the stage is not this code.
+  const ranHash = selected?.loadedSourceHashes?.[stage.codeStageId]
+  const otherCode = runStage === stage.codeStageId && selected?.loadedSourceHashes != null && ranHash !== stage.sourceHash
+  const runMatches = runStage === stage.codeStageId && ranHash === stage.sourceHash
   const replay = useReplay(runMatches ? selected : undefined, null)
   const busy = state.runtime !== null && state.runtime.phase !== 'idle'
   const completedStages = useMemo(() => new Set(lessonProgress?.completed.map(item => item.stageId)), [lessonProgress])
@@ -143,10 +144,11 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
     line?.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }, [located])
   const upstream = lesson.upstreamRefs.filter(ref => stage.upstreamRefIds.includes(ref.id))
-  // This plugin's own checkpoints ("<plugin>:<name>") up to the scenario end, as lessons:verify reads them.
-  const recorded = useMemo(() => (runMatches && selected ? selected.records.slice(0, replay.seq + 1) : [])
-    .filter(record => record.kind === 'checkpoint' && record.name.startsWith(`checkpoint/${lesson.pluginDefinitionId}:`))
-    .map(record => record.name.slice('checkpoint/'.length)), [runMatches, selected, replay.seq, lesson.pluginDefinitionId])
+  // This plugin's own checkpoints during the scenario, read the way lessons:verify reads them.
+  const recorded = useMemo(
+    () => (runMatches && selected ? recordedCheckpoints(selected.records, lesson.pluginDefinitionId) : []),
+    [runMatches, selected, lesson.pluginDefinitionId],
+  )
   const requests = runMatches && selected
     ? selected.records
       .filter(record => record.name === 'model/request' && record.seq <= replay.seq)
@@ -268,7 +270,9 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
                   {stage.expectedCheckpoints ? (
                     <>
                       <h3>检查点</h3>
-                      <CheckpointCheck expected={stage.expectedCheckpoints} recorded={recorded} />
+                      {selected.settled
+                        ? <CheckpointCheck expected={stage.expectedCheckpoints} recorded={recorded} />
+                        : <p className="muted">运行中，结束后核对检查点。</p>}
                     </>
                   ) : null}
                   <h3>注册项（场景结束时）</h3>

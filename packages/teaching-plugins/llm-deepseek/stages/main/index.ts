@@ -30,7 +30,7 @@ export interface Config {
 
 export const Config: z<Config> = z.object({
   model: z.string(),
-  maxTokens: z.natural(),
+  maxTokens: z.natural().min(1),
 })
 
 /** Same rule as upstream messagesApiRoot: append /v1 unless already present. */

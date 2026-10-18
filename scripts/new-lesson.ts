@@ -57,7 +57,7 @@ export function apply(ctx: Context) {
 
   await write(join(paths.content, 'manifest.ts'), `import type { AuthoredLesson } from '@harness-explorer/lesson-kit'
 
-const lesson: AuthoredLesson & { compositionId: string } = {
+const lesson: AuthoredLesson = {
   id: '${id}',
   title: '${title}',
   summary: 'TODO: one sentence on what the learner will understand.',

@@ -5,17 +5,12 @@ import { LessonBuild, verifyStageRuns } from '@harness-explorer/lesson-kit'
 import { compositions, modelScripts, outDir, repoRoot, scenarios } from './lesson-env.ts'
 
 const build = LessonBuild.parse(JSON.parse(readFileSync(join(outDir, 'lessons.json'), 'utf8')))
-const manifests = new Map<string, string>()
-for (const lesson of build.lessons) {
-  const manifest = (await import(join(repoRoot, 'content/plugins', lesson.id, 'manifest.ts'))).default as { compositionId: string }
-  manifests.set(lesson.id, manifest.compositionId)
-}
 const reports = await verifyStageRuns(build, {
   repoRoot,
   compositions,
   scenarios: Object.fromEntries(Object.values(scenarios).map(scenario => [scenario.id, scenario])),
   modelScripts: Object.fromEntries(Object.values(modelScripts).map(script => [script.id, script])),
-  compositionOf: id => manifests.get(id)!,
+  compositionOf: id => build.lessons.find(lesson => lesson.id === id)!.compositionId,
 })
 const passed = (report: (typeof reports)[number]) => report.outcome === 'completed' && !report.providesMismatches.length && !report.checkpointMismatch
 for (const report of reports) {

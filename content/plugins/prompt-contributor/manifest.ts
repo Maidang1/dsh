@@ -1,6 +1,6 @@
 import type { AuthoredLesson } from '@harness-explorer/lesson-kit'
 
-const lesson: AuthoredLesson & { compositionId: string } = {
+const lesson: AuthoredLesson = {
   id: 'prompt-contributor',
   title: '提示词贡献插件',
   summary: '从一个空插件开始，声明对 systemPrompt 的依赖，注册一段提示词，再观察卸载时它如何被自动清理。',

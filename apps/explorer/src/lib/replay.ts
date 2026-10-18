@@ -1,10 +1,9 @@
 'use client'
 import { useMemo } from 'react'
-import { ReplayIndex, emptySnapshot } from '@harness-explorer/trace/browser'
+import { ReplayIndex, emptySnapshot, scenarioPart } from '@harness-explorer/trace/browser'
 import type { ViewSnapshot } from '@harness-explorer/trace/browser'
 import type { ModelRequestPayload } from '@harness-explorer/contracts'
 import type { RunData } from './store'
-import { settleIndex } from './compare'
 
 export interface Replay {
   index: ReplayIndex | null
@@ -43,8 +42,8 @@ export function useReplay(data: RunData | undefined, cursor: number | null): Rep
   )
   const lastSeq = count - 1
   // By default show the scenario's final state, before settlement unloads everything.
-  const settle = data ? settleIndex(data.records) : -1
-  const seq = cursor === null ? (settle >= 0 ? data!.records[settle]!.seq - 1 : lastSeq) : Math.min(cursor, lastSeq)
+  const scenarioEnd = data ? scenarioPart(data.records).length - 1 : -1
+  const seq = cursor === null ? (scenarioEnd < lastSeq ? scenarioEnd : lastSeq) : Math.min(cursor, lastSeq)
   // The index object is reused across batches, so `count` keys the projection too.
   const snapshot = useMemo(() => (index && seq >= 0 ? index.at(seq) : emptySnapshot()), [index, seq, count])
   return { index, lastSeq, seq, snapshot }
@@ -73,10 +72,30 @@ export function requestsOf(data: RunData | undefined, prefix = ''): RequestEntry
 
 export type DiffLine = { kind: 'same' | 'added' | 'removed'; text: string }
 
-/** Line diff by longest common subsequence; inputs are small (prompts, messages). */
+/** The LCS table holds one cell per pair of differing lines; past this the middle is listed, not aligned. */
+export const MAX_DIFF_CELLS = 2_000_000
+
+/**
+ * Line diff by longest common subsequence. The common head and tail are
+ * matched first; if what differs is still too large for the table, it is shown
+ * as removed then added rather than letting a long trace stall the page.
+ */
 export function diffLines(before: string, after: string): DiffLine[] {
   const a = before.split('\n')
   const b = after.split('\n')
+  let head = 0
+  while (head < a.length && head < b.length && a[head] === b[head]) head++
+  let tail = 0
+  while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++
+  const same = (text: string): DiffLine => ({ kind: 'same', text })
+  const middle = lcsDiff(a.slice(head, a.length - tail), b.slice(head, b.length - tail))
+  return [...a.slice(0, head).map(same), ...middle, ...a.slice(a.length - tail).map(same)]
+}
+
+function lcsDiff(a: readonly string[], b: readonly string[]): DiffLine[] {
+  if (a.length * b.length > MAX_DIFF_CELLS) {
+    return [...a.map(text => ({ kind: 'removed' as const, text })), ...b.map(text => ({ kind: 'added' as const, text }))]
+  }
   const table = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0))
   for (let i = a.length - 1; i >= 0; i--) {
     for (let j = b.length - 1; j >= 0; j--) {

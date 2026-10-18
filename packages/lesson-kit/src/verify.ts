@@ -1,8 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { PluginPhasePayload, ServiceChangePayload, TraceName } from '@harness-explorer/contracts'
-import type { Composition, ExecutableStageDefinition, ModelScript, RunOutcome, Scenario, TraceRecord } from '@harness-explorer/contracts'
+import type { Composition, ExecutableStageDefinition, ModelScript, RunOutcome, Scenario } from '@harness-explorer/contracts'
 import { runScenario } from '@harness-explorer/teaching-runtime'
+import { recordedCheckpoints } from '@harness-explorer/trace'
 import type { RunResult } from '@harness-explorer/teaching-runtime'
 import { excerptHash } from './anchors.ts'
 import type { LessonBuild } from './schema.ts'
@@ -70,18 +71,6 @@ export async function verifyStageRuns(lessonBuild: LessonBuild, options: VerifyO
   }
   return reports
 }
-
-/**
- * Teaching checkpoints a plugin recorded, in order, without the "checkpoint/"
- * prefix. Each plugin names its own as "<plugin>:<name>"; others are left out.
- */
-export function recordedCheckpoints(records: readonly TraceRecord[], pluginDefinitionId: string): string[] {
-  return records
-    .filter(record => record.kind === 'checkpoint' && record.name.startsWith(`${CHECKPOINT_PREFIX}${pluginDefinitionId}:`))
-    .map(record => record.name.slice(CHECKPOINT_PREFIX.length))
-}
-
-const CHECKPOINT_PREFIX = 'checkpoint/'
 
 function checkCheckpoints(recorder: RunResult['recorder'], pluginDefinitionId: string, expected: readonly string[] | undefined): string | null {
   if (!expected) return null

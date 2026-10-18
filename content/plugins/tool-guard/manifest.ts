@@ -1,6 +1,6 @@
 import type { AuthoredLesson } from '@harness-explorer/lesson-kit'
 
-const lesson: AuthoredLesson & { compositionId: string } = {
+const lesson: AuthoredLesson = {
   id: 'tool-guard',
   title: '工具守卫：around 中间件',
   summary: '在 tools/pre-execute 上挂监听器，观察 waterfall 的进入、委托与返回，再让内层监听器短路拒绝一次工具调用。',

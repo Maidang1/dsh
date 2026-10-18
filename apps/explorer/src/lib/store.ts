@@ -31,6 +31,8 @@ export interface RunData {
   gaps: Array<{ fromSeq: number; toSeq: number }>
   settled: { finalSeq: number; outcome: RunManifest['outcome']; completeness: RunManifest['completeness'] } | null
   revision: ExperimentRevision | null
+  /** From the run's manifest: the sourceHash each stage ran with; null until the manifest is loaded. */
+  loadedSourceHashes: Record<string, string> | null
 }
 
 export type Layer = 'composition' | 'dependency' | 'data'
@@ -108,6 +110,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
           [runId]: {
             runId,
             revision: previous?.revision ?? null,
+            loadedSourceHashes: previous?.loadedSourceHashes ?? null,
             settled: previous?.settled ?? null,
             // Append-only view of the buffer's contiguous prefix; no per-batch copy.
             records: buffer.records,
@@ -139,9 +142,13 @@ export const useExplorer = create<ExplorerState>((set, get) => {
   /** Load a run: a live run streams over SSE; a settled run is read from the store. */
   const loadRun = async (runId: string, live: boolean) => {
     if (!get().runData[runId]) {
-      set(state => ({ runData: { ...state.runData, [runId]: { runId, records: [], payloads: {}, gaps: [], settled: null, revision: null } } }))
+      set(state => ({ runData: { ...state.runData, [runId]: { runId, records: [], payloads: {}, gaps: [], settled: null, revision: null, loadedSourceHashes: null } } }))
     }
     const { manifest } = await api.run(runId)
+    set(state => {
+      const data = state.runData[runId]
+      return data ? { runData: { ...state.runData, [runId]: { ...data, loadedSourceHashes: manifest.loadedSourceHashes } } } : {}
+    })
     void loadRevision(runId, manifest.experimentRevisionId)
     if (live) {
       unsubscribe?.()

@@ -93,7 +93,12 @@ export function loadDevCatalog(root = repoRoot): Catalog {
 export function loadBuiltCatalog(root = repoRoot): Catalog | null {
   const path = join(root, 'packages/teaching-plugins/dist/lessons.json')
   if (!existsSync(path)) return null
-  const lessons = LessonBuild.parse(JSON.parse(readFileSync(path, 'utf8')))
+  const parsed = LessonBuild.safeParse(JSON.parse(readFileSync(path, 'utf8')))
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]
+    throw new Error(`${path.slice(root.length)} does not match this version (${issue?.path.join('.')}: ${issue?.message}); run pnpm lessons:build`)
+  }
+  const lessons = parsed.data
   const dev = loadDevCatalog(root)
   if (lessons.upstreamCommit !== dev.upstreamCommit) {
     throw new Error(`lessons.json was built for ${lessons.upstreamCommit}, upstream-lock.json pins ${dev.upstreamCommit}`)

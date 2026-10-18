@@ -123,6 +123,9 @@ importers:
       '@harness-explorer/teaching-runtime':
         specifier: workspace:*
         version: link:../teaching-runtime
+      '@harness-explorer/trace':
+        specifier: workspace:*
+        version: link:../trace
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2

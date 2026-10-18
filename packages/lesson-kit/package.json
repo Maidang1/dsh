@@ -10,6 +10,7 @@
     "@harness-explorer/contracts": "workspace:*",
     "@harness-explorer/teaching-plugins": "workspace:*",
     "@harness-explorer/teaching-runtime": "workspace:*",
+    "@harness-explorer/trace": "workspace:*",
     "esbuild": "^0.28.2",
     "zod": "^4.6.7"
   }
