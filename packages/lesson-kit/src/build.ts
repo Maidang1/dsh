@@ -123,7 +123,7 @@ function check(condition: unknown, message: string): asserts condition {
 }
 
 async function buildLesson(dir: string, options: BuildOptions, stages: ReadonlyMap<string, BuiltStage>): Promise<BuiltLesson> {
-  const lesson = AuthoredLesson.extend({ compositionId: AuthoredLesson.shape.id }).parse(await importData(join(dir, 'manifest.ts')))
+  const lesson = AuthoredLesson.parse(await importData(join(dir, 'manifest.ts')))
   const architecture = Architecture.parse(await importData(join(dir, 'architecture.ts')))
   const upstream = UpstreamRef.array().parse(await importData(join(dir, 'upstream-map.ts')))
   const mdx = await readFile(join(dir, 'lesson.mdx'), 'utf8')
@@ -164,8 +164,7 @@ async function buildLesson(dir: string, options: BuildOptions, stages: ReadonlyM
   })
 
   const upstreamRefs: SourceRef[] = upstream.map(ref => ({ ...ref, origin: 'upstream', revision: options.upstreamCommit }))
-  const { compositionId: _compositionId, ...rest } = lesson
-  return { ...rest, upstreamCommit: options.upstreamCommit, stages: builtStages, architecture, upstreamRefs, mdx }
+  return { ...lesson, upstreamCommit: options.upstreamCommit, stages: builtStages, architecture, upstreamRefs, mdx }
 }
 
 export async function buildLessons(options: BuildOptions): Promise<LessonBuild> {

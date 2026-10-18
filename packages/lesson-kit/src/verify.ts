@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { PluginPhasePayload, ServiceChangePayload, TraceName } from '@harness-explorer/contracts'
-import type { Composition, ExecutableStageDefinition, ModelScript, RunOutcome, Scenario } from '@harness-explorer/contracts'
+import type { Composition, ExecutableStageDefinition, ModelScript, RunOutcome, Scenario, TraceRecord } from '@harness-explorer/contracts'
 import { runScenario } from '@harness-explorer/teaching-runtime'
 import type { RunResult } from '@harness-explorer/teaching-runtime'
 import { excerptHash } from './anchors.ts'
@@ -15,6 +15,8 @@ export interface StageRunReport {
   error: string | null
   /** Instances whose observed services differ from their stage's declared `provides`. */
   providesMismatches: string[]
+  /** Set when the recorded checkpoints differ from the stage's expectedCheckpoints. */
+  checkpointMismatch: string | null
 }
 
 export interface VerifyOptions {
@@ -61,11 +63,30 @@ export async function verifyStageRuns(lessonBuild: LessonBuild, options: VerifyO
           outcome: result.outcome,
           error: result.error ? `${result.error.name}: ${result.error.message}` : null,
           providesMismatches: checkProvides(result.recorder, composition, stages),
+          checkpointMismatch: checkCheckpoints(result.recorder, lesson.pluginDefinitionId, stage.expectedCheckpoints),
         })
       }
     }
   }
   return reports
+}
+
+/**
+ * Teaching checkpoints a plugin recorded, in order, without the "checkpoint/"
+ * prefix. Each plugin names its own as "<plugin>:<name>"; others are left out.
+ */
+export function recordedCheckpoints(records: readonly TraceRecord[], pluginDefinitionId: string): string[] {
+  return records
+    .filter(record => record.kind === 'checkpoint' && record.name.startsWith(`${CHECKPOINT_PREFIX}${pluginDefinitionId}:`))
+    .map(record => record.name.slice(CHECKPOINT_PREFIX.length))
+}
+
+const CHECKPOINT_PREFIX = 'checkpoint/'
+
+function checkCheckpoints(recorder: RunResult['recorder'], pluginDefinitionId: string, expected: readonly string[] | undefined): string | null {
+  if (!expected) return null
+  const recorded = recordedCheckpoints(recorder.records, pluginDefinitionId)
+  return recorded.join(',') === expected.join(',') ? null : `expected checkpoints [${expected.join(', ')}] but recorded [${recorded.join(', ')}]`
 }
 
 /**

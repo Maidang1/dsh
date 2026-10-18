@@ -77,6 +77,7 @@ const lesson: AuthoredLesson & { compositionId: string } = {
       contractIds: ['CTX-02'],
       scenarioIds: ['${id}'],
       expectedObservations: ['插件进入 active'],
+      expectedCheckpoints: [],
       upstreamRefIds: [],
       simplifications: [],
     },

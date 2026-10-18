@@ -282,10 +282,14 @@ export const useExplorer = create<ExplorerState>((set, get) => {
 
     async runLessonStage(lessonId, definitionId, stageId, scenarioId) {
       const state = get()
-      const base = state.selectedRunId ? state.runData[state.selectedRunId]?.revision : null
-      const composition = base?.composition ?? state.draft?.composition
-      if (!composition) return
-      if (!composition.instances.some(instance => instance.definitionId === definitionId)) {
+      // The selected run's revision is the base (docs/03 §4.2); without an instance of the plugin there,
+      // the draft, then the lesson's own preset composition, so a lesson runs without assembling it first.
+      const selectedRevision = state.selectedRunId ? state.runData[state.selectedRunId]?.revision : null
+      const hasPlugin = (candidate: Composition | undefined) => candidate?.instances.some(instance => instance.definitionId === definitionId) ?? false
+      const preset = state.compositions[state.lessons?.lessons.find(lesson => lesson.id === lessonId)?.compositionId ?? '']
+      const base = hasPlugin(selectedRevision?.composition) ? selectedRevision : null
+      const composition = [selectedRevision?.composition, state.draft?.composition, preset].find(hasPlugin)
+      if (!composition) {
         set({ error: `组合中没有 ${definitionId} 的实例，请先在整体组合中添加` })
         return
       }

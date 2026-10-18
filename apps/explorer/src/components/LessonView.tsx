@@ -19,6 +19,24 @@ import { NarrowTabs, narrowPane } from './NarrowTabs'
 
 type SideTab = 'architecture' | 'state' | 'upstream'
 
+/** Expected checkpoints next to the recorded ones, in order; a mismatch is spelled out, not just coloured. */
+function CheckpointCheck({ expected, recorded }: { expected: readonly string[]; recorded: readonly string[] }) {
+  const same = expected.length === recorded.length && expected.every((name, index) => name === recorded[index])
+  return (
+    <div aria-label="检查点对照">
+      <p className={same ? '' : 'warning-text'}>{same ? '✓ 记录的检查点与预期一致' : '✕ 记录的检查点与预期不同'}</p>
+      <ol>
+        {expected.map((name, index) => (
+          <li key={`${index}-${name}`}>
+            {name}{recorded[index] === name ? ' ✓' : ` ✕ 实际：${recorded[index] ?? '（没有记录）'}`}
+          </li>
+        ))}
+      </ol>
+      {recorded.length > expected.length ? <p className="warning-text">多出：{recorded.slice(expected.length).join('、')}</p> : null}
+    </div>
+  )
+}
+
 const NODE_KIND: Record<ArchitectureNode['kind'], string> = {
   'entry': '入口',
   'type': '类型',
@@ -125,6 +143,10 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
     line?.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }, [located])
   const upstream = lesson.upstreamRefs.filter(ref => stage.upstreamRefIds.includes(ref.id))
+  // This plugin's own checkpoints ("<plugin>:<name>") up to the scenario end, as lessons:verify reads them.
+  const recorded = useMemo(() => (runMatches && selected ? selected.records.slice(0, replay.seq + 1) : [])
+    .filter(record => record.kind === 'checkpoint' && record.name.startsWith(`checkpoint/${lesson.pluginDefinitionId}:`))
+    .map(record => record.name.slice('checkpoint/'.length)), [runMatches, selected, replay.seq, lesson.pluginDefinitionId])
   const requests = runMatches && selected
     ? selected.records
       .filter(record => record.name === 'model/request' && record.seq <= replay.seq)
@@ -242,6 +264,12 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
                   <p>运行 {selected.runId} · {selected.settled ? outcomeText(selected.settled.outcome) : '运行中'}</p>
                   {lessonInstance ? (
                     <p>{lessonInstance.id}：{phaseOf(replay.snapshot.plugins[lessonInstance.id]).text}{replay.snapshot.plugins[lessonInstance.id]?.reason ? ` · ${replay.snapshot.plugins[lessonInstance.id]!.reason}` : ''}</p>
+                  ) : null}
+                  {stage.expectedCheckpoints ? (
+                    <>
+                      <h3>检查点</h3>
+                      <CheckpointCheck expected={stage.expectedCheckpoints} recorded={recorded} />
+                    </>
                   ) : null}
                   <h3>注册项（场景结束时）</h3>
                   <ul>{Object.values(replay.snapshot.registrations).map(item => <li key={item.registrationId}>{item.name} · {item.instanceId ?? '—'}</li>)}</ul>

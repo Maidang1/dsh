@@ -19,6 +19,11 @@ export const AuthoredLessonStage = z.object({
   contractIds: z.array(Id),
   scenarioIds: z.array(Id),
   expectedObservations: z.array(z.string()),
+  /**
+   * The checkpoint names (without "checkpoint/") the stage's scenarios must
+   * record, in order: the machine-checked part of expectedObservations.
+   */
+  expectedCheckpoints: z.array(Id).optional(),
   upstreamRefIds: z.array(Id),
   simplifications: z.array(z.string()),
 })
@@ -29,6 +34,8 @@ export const AuthoredLesson = z.object({
   title: z.string().min(1),
   summary: z.string().min(1),
   pluginDefinitionId: Id,
+  /** Preset composition (fixtures/compositions) a stage run starts from when the selected run has no instance of the plugin. */
+  compositionId: Id,
   prerequisites: z.array(Id),
   supportLevel: z.enum(['contract-verified', 'upstream-compared', 'draft']),
   stages: z.array(AuthoredLessonStage).min(1),

@@ -246,3 +246,25 @@ test('a lesson does not attribute a run of other code to the code it shows', asy
     if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
   }
 })
+
+test('a lesson whose plugin is not in the selected run runs from its own composition and checks its checkpoints', async ({ page }) => {
+  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
+  await page.goto('/plugin/tool-guard?stage=tool-guard@02-deny')
+  await expect(page.getByText(/^阶段 3\/3 · /)).toBeVisible()
+  await page.getByRole('button', { name: '运行此阶段' }).click()
+  await page.getByRole('tab', { name: '状态与数据' }).click()
+  const check = page.getByLabel('检查点对照')
+  await expect(check).toContainText('✓ 记录的检查点与预期一致', { timeout: 20_000 })
+  await expect(check.locator('li')).toHaveText([
+    'tool-guard:audit-enter ✓',
+    'tool-guard:policy-enter ✓',
+    'tool-guard:policy-deny ✓',
+    'tool-guard:audit-return ✓',
+  ])
+
+  const origin = { origin: new URL(page.url()).origin }
+  await page.request.put('/api/lessons/tool-guard/progress', { data: { lastStageId: '00-observe' }, headers: origin })
+  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
+    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
+  }
+})
