@@ -51,6 +51,15 @@ export interface StorageUsage {
   retention: { maxRuns: number; maxBytes: number } | null
 }
 
+export interface LearningProgress {
+  lessons: Record<string, { lastStageId: string | null; completed: Array<{ stageId: string; runId: string }> }>
+}
+
+export interface LessonProgressUpdate {
+  lastStageId?: string
+  completed?: { stageId: string; runId: string }
+}
+
 export class ApiError extends Error {
   constructor(readonly status: number, message: string) {
     super(message)
@@ -89,6 +98,9 @@ export const api = {
   startRun: (revisionId: string, adapterMode: AdapterMode) =>
     request<{ runId: string }>('/api/runs', { method: 'POST', json: { revisionId, adapterMode } }),
   storage: () => request<StorageUsage>('/api/storage'),
+  progress: () => request<LearningProgress>('/api/progress'),
+  updateLessonProgress: (lessonId: string, update: LessonProgressUpdate) =>
+    request<LearningProgress>(`/api/lessons/${encodeURIComponent(lessonId)}/progress`, { method: 'PUT', json: update }),
   deleteRun: (runId: string) => request<{ deleted: string }>(`/api/runs/${encodeURIComponent(runId)}`, { method: 'DELETE' }),
   pinRun: (runId: string, pinned: boolean) => request<{ pinned: boolean }>(`/api/runs/${encodeURIComponent(runId)}/pin`, { method: 'PUT', json: { pinned } }),
   importRun: (bundle: unknown) => request<RunManifest>('/api/imports', { method: 'POST', json: bundle }),

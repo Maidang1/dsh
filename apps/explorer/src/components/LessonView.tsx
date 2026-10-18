@@ -5,7 +5,7 @@
  * navigator plus the stage's own run sit below.
  */
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { BuiltLesson } from '@harness-explorer/lesson-kit/schema'
 import type { ModelRequestPayload } from '@harness-explorer/contracts'
@@ -34,6 +34,23 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
   const [tab, setTab] = useState<SideTab>('architecture')
   useEffect(() => { void useExplorer.getState().init() }, [])
 
+  // Restore the reading position once progress is loaded, then save every move.
+  const lessonProgress = state.progress?.lessons[lesson.id]
+  const restored = useRef(false)
+  useEffect(() => {
+    if (restored.current || !state.progress) return
+    restored.current = true
+    const saved = views.findIndex(item => item.stage.id === lessonProgress?.lastStageId)
+    if (saved > 0) setIndex(saved)
+  }, [state.progress, lessonProgress, views])
+  useEffect(() => {
+    if (!restored.current) return
+    const stageId = views[index]!.stage.id
+    if (stageId !== useExplorer.getState().progress?.lessons[lesson.id]?.lastStageId) {
+      void useExplorer.getState().updateLessonProgress(lesson.id, { lastStageId: stageId })
+    }
+  }, [index, views, lesson.id])
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return
@@ -54,6 +71,14 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
   const runMatches = runStage === stage.codeStageId
   const replay = useReplay(runMatches ? selected : undefined, null)
   const busy = state.runtime !== null && state.runtime.phase !== 'idle'
+  const completedStages = useMemo(() => new Set(lessonProgress?.completed.map(item => item.stageId)), [lessonProgress])
+
+  // A completed run of this stage's own code counts as having run the stage.
+  const settledOk = runMatches && selected?.settled?.outcome === 'completed'
+  useEffect(() => {
+    if (stage.kind !== 'executable' || !settledOk || !selected || completedStages.has(stage.id)) return
+    void useExplorer.getState().updateLessonProgress(lesson.id, { completed: { stageId: stage.id, runId: selected.runId } })
+  }, [settledOk, stage.id, stage.kind, selected, lesson.id, completedStages])
 
   const introduced = useMemo(() => new Set(lesson.stages.slice(0, index + 1).map(item => item.id)), [lesson.stages, index])
   const upstream = lesson.upstreamRefs.filter(ref => stage.upstreamRefIds.includes(ref.id))
@@ -196,13 +221,13 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
             {views.map((item, position) => (
               <li key={item.stage.id}>
                 <button type="button" aria-current={position === index ? 'step' : undefined} onClick={() => setIndex(position)}>
-                  {item.stage.id} {item.stage.kind === 'explanation' ? '（解释）' : ''}
+                  {item.stage.id} {item.stage.kind === 'explanation' ? '（解释）' : ''}{completedStages.has(item.stage.id) ? ' ✓' : ''}
                 </button>
               </li>
             ))}
           </ol>
           <button type="button" onClick={() => setIndex(Math.min(index + 1, views.length - 1))} disabled={index === views.length - 1}>下一阶段</button>
-          <span className="muted">也可以用 ← → 切换；切换阶段不会运行代码。</span>
+          <span className="muted">也可以用 ← → 切换；切换阶段不会运行代码。✓ 表示该阶段已有一次成功运行。</span>
         </nav>
         <div className="stage-text">
           <h2>{stage.title}</h2>

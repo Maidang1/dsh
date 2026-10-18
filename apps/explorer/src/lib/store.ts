@@ -18,7 +18,7 @@ import type {
 } from '@harness-explorer/contracts'
 import { TraceBuffer } from '@harness-explorer/trace/browser'
 import { api, ApiError, subscribeRun } from './api'
-import type { Draft, LessonsResponse, PublicCatalog, StorageUsage } from './api'
+import type { Draft, LearningProgress, LessonProgressUpdate, LessonsResponse, PublicCatalog, StorageUsage } from './api'
 
 export const DRAFT_ID = 'main'
 const DEFAULT_COMPOSITION = 'minimal-chat'
@@ -55,6 +55,7 @@ interface ExplorerState {
   adapterMode: AdapterMode
   environment: Record<AdapterMode, EnvironmentSnapshot> | null
   storage: StorageUsage | null
+  progress: LearningProgress | null
 
   init(): Promise<void>
   selectRun(runId: string | null): Promise<void>
@@ -73,6 +74,8 @@ interface ExplorerState {
    */
   runLessonStage(lessonId: string, definitionId: string, stageId: string, scenarioId: string): Promise<void>
   cancel(): Promise<void>
+  /** Save reading position or a stage completion; applied locally at once. */
+  updateLessonProgress(lessonId: string, update: LessonProgressUpdate): Promise<void>
   refreshRuns(): Promise<void>
   deleteRun(runId: string): Promise<void>
   pinRun(runId: string, pinned: boolean): Promise<void>
@@ -174,6 +177,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     adapterMode: 'deterministic',
     environment: null,
     storage: null,
+    progress: null,
 
     async init() {
       try {
@@ -195,7 +199,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
           }, null)
         }
         const storage = await api.storage().catch(() => null)
-        set({ ready: true, catalog, compositions, runtime, runs, draft, lessons, environment, storage })
+        const progress = await api.progress().catch(() => ({ lessons: {} }))
+        set({ ready: true, catalog, compositions, runtime, runs, draft, lessons, environment, storage, progress })
         const latest = runtime.runId ?? runs[0]?.runId ?? null
         if (latest) await get().selectRun(latest)
       } catch (error) {
@@ -284,6 +289,20 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         await get().refreshRuns()
       } catch (error) {
         set({ error: message(error) })
+      }
+    },
+
+    async updateLessonProgress(lessonId, update) {
+      const previous = get().progress ?? { lessons: {} }
+      const lesson = previous.lessons[lessonId] ?? { lastStageId: null, completed: [] }
+      const completed = update.completed && !lesson.completed.some(item => item.stageId === update.completed!.stageId)
+        ? [...lesson.completed, update.completed]
+        : lesson.completed
+      set({ progress: { lessons: { ...previous.lessons, [lessonId]: { lastStageId: update.lastStageId ?? lesson.lastStageId, completed } } } })
+      try {
+        set({ progress: await api.updateLessonProgress(lessonId, update) })
+      } catch (error) {
+        set({ progress: previous, error: message(error) })
       }
     },
 

@@ -43,8 +43,17 @@ test('runs stage 02 and shows the contributed section in its requests', async ()
   await page.screenshot({ path: 'test-results/lesson-stage-02.png', fullPage: true })
 })
 
+test('marks a stage once it has run and restores the reading position after a reload', async () => {
+  await expect(page.getByRole('button', { name: /^02-section.*✓$/ })).toBeVisible()
+  await page.reload()
+  await expect(page.getByText('阶段 3/5 · 注册提示词片段')).toBeVisible()
+  const progress = await page.request.get('/api/progress').then(response => response.json())
+  expect(progress.lessons['prompt-contributor'].completed).toEqual([expect.objectContaining({ stageId: '02-section' })])
+})
+
 test('flags a run that executed a different stage than the one being read', async () => {
   await page.getByRole('button', { name: '00-entry' }).click()
+  await page.getByRole('tab', { name: '状态与数据' }).click()
   await expect(page.locator('.stage-state')).toContainText('与当前阅读阶段 prompt-contributor@00-entry 不同')
 })
 

@@ -37,6 +37,21 @@ export const RunBundle = z.object({
 })
 export type RunBundle = z.infer<typeof RunBundle>
 
+/** Per-lesson reading position and the stages a completed run has exercised (UI state, not run facts). */
+export const LearningProgress = z.object({
+  lessons: z.record(z.string(), z.object({
+    lastStageId: z.string().nullable(),
+    completed: z.array(z.object({ stageId: z.string().min(1), runId: z.string().min(1) })),
+  })),
+})
+export type LearningProgress = z.infer<typeof LearningProgress>
+
+export const LessonProgressUpdate = z.object({
+  lastStageId: z.string().min(1).optional(),
+  completed: z.object({ stageId: z.string().min(1), runId: z.string().min(1) }).optional(),
+})
+export type LessonProgressUpdate = z.infer<typeof LessonProgressUpdate>
+
 export interface StoreUsage {
   runs: number
   records: number
@@ -388,6 +403,26 @@ export class RunStore {
   }
 
   // Progress ------------------------------------------------------------------
+
+  async getLearningProgress(): Promise<LearningProgress> {
+    const raw = await this.getProgress()
+    const parsed = LearningProgress.safeParse(raw)
+    return parsed.success ? parsed.data : { lessons: {} }
+  }
+
+  /** Merge one lesson's progress; completions are kept once per stage with the run that proved them. */
+  async updateLessonProgress(lessonId: string, update: LessonProgressUpdate): Promise<LearningProgress> {
+    const progress = await this.getLearningProgress()
+    const lesson = progress.lessons[lessonId] ?? { lastStageId: null, completed: [] }
+    if (update.lastStageId !== undefined) lesson.lastStageId = update.lastStageId
+    if (update.completed && !lesson.completed.some(item => item.stageId === update.completed!.stageId)) {
+      await this.getManifest(update.completed.runId)
+      lesson.completed.push(update.completed)
+    }
+    progress.lessons[lessonId] = lesson
+    await this.saveProgress(LearningProgress.parse(progress) as unknown as JsonValue)
+    return progress
+  }
 
   async getProgress(): Promise<JsonValue> {
     const path = this.path('progress.json')
