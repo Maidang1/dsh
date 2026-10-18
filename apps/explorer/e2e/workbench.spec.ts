@@ -54,6 +54,20 @@ test('renders only the visible part of a long trace and follows the cursor', asy
   await expect(page.getByText(`回放位置 ${total - 2} /`)).toBeVisible()
 })
 
+test('lists the lifecycle history of an instance and jumps to a transition', async () => {
+  await page.getByLabel('列表视图').check()
+  await page.getByRole('list', { name: '插件列表' }).getByRole('button', { name: /^prompt-contributor/ }).click()
+  const history = page.getByRole('list', { name: /状态变化/ })
+  const activation = history.getByRole('button', { name: /已激活.*步骤 mount$/ })
+  await expect(activation).toBeVisible()
+  await expect(history).toContainText('步骤 unmount')
+  const seq = (await activation.textContent())!.match(/#(\d+)/)![1]
+  await activation.click()
+  await expect(page.getByText(`回放位置 ${seq} /`)).toBeVisible()
+  await expect(activation).toHaveAttribute('aria-current', 'step')
+  await page.getByLabel('列表视图').uncheck()
+})
+
 test('compares the request before and after the contributor is mounted', async () => {
   await page.getByRole('tab', { name: '请求对比' }).click()
   await page.getByLabel('请求 A').selectOption({ index: 0 })

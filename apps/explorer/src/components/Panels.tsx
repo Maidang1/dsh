@@ -6,7 +6,8 @@ import type { AdapterMode, EnvironmentSnapshot, PluginInstance, RuntimeState } f
 import type { ViewSnapshot } from '@harness-explorer/trace/browser'
 import type { Draft, LessonsResponse, PublicCatalog, PublicStage } from '@/lib/api'
 import type { RunData } from '@/lib/store'
-import { phaseOf } from './PluginTree'
+import { PHASE_LABEL, phaseOf } from './PluginTree'
+import type { PhaseChange } from '@/lib/replay'
 
 const PHASE_TEXT: Record<RuntimeState['phase'], string> = {
   idle: '空闲',
@@ -89,9 +90,12 @@ interface InspectorProps {
   onRemove(id: string): void
   onStage(id: string, stageId: string): void
   onEnabled(id: string, enabled: boolean): void
+  history: PhaseChange[]
+  seq: number
+  onCursor(seq: number): void
 }
 
-export function Inspector({ instance, stage, snapshot, lessons, editable, stagesOfDefinition, onRemove, onStage, onEnabled }: InspectorProps) {
+export function Inspector({ instance, stage, snapshot, lessons, editable, stagesOfDefinition, onRemove, onStage, onEnabled, history, seq, onCursor }: InspectorProps) {
   if (!instance) return <aside className="inspector"><p className="muted">选择插件树中的一个实例查看状态与依赖。</p></aside>
   const plugin = snapshot.plugins[instance.id]
   const phase = phaseOf(plugin)
@@ -111,6 +115,21 @@ export function Inspector({ instance, stage, snapshot, lessons, editable, stages
         <dt>需要</dt><dd>{stage?.requires.join('、') || '无'}</dd>
         <dt>提供</dt><dd>{stage?.provides.join('、') || '无'}</dd>
       </dl>
+      <h3>状态变化</h3>
+      {history.length ? (
+        <ol className="phase-history" aria-label="状态变化（点击跳到该位置）">
+          {history.map(change => (
+            <li key={change.seq} className={change.seq > seq ? 'is-future' : ''}>
+              <button type="button" aria-current={change.seq <= seq && !history.some(later => later.seq > change.seq && later.seq <= seq) ? 'step' : undefined} onClick={() => onCursor(change.seq)}>
+                <span aria-hidden>{(PHASE_LABEL[change.phase] ?? PHASE_LABEL.none!).mark}</span> {(PHASE_LABEL[change.phase] ?? PHASE_LABEL.none!).text}
+                <span className="muted"> · #{change.seq}{change.stepId ? ` · 步骤 ${change.stepId}` : ' · 初始挂载'}</span>
+              </button>
+              {change.reason ? <div className="muted">{change.reason}</div> : null}
+              {change.error ? <div className="error-text">{change.error}</div> : null}
+            </li>
+          ))}
+        </ol>
+      ) : <p className="muted">本次运行没有记录到该实例的状态。</p>}
       <h3>当前注册项</h3>
       {registrations.length
         ? <ul>{registrations.map(item => <li key={item.registrationId}>{item.kind} · {item.name}（作用域 {item.scopeId}）</li>)}</ul>

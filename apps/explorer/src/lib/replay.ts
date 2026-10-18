@@ -100,3 +100,35 @@ export function diffLines(before: string, after: string): DiffLine[] {
   while (j < b.length) lines.push({ kind: 'added', text: b[j++]! })
   return lines
 }
+
+export interface PhaseChange {
+  seq: number
+  phase: string
+  reason: string | null
+  error: string | null
+  stepId: string | undefined
+}
+
+/**
+ * Lifecycle history of one instance as recorded in the trace, with repeated
+ * phases collapsed. Each entry is an observed transition (FIBER-01), never a
+ * guess from timing.
+ */
+export function phaseHistory(data: RunData | undefined, instanceId: string | undefined): PhaseChange[] {
+  if (!data || !instanceId) return []
+  const history: PhaseChange[] = []
+  for (const record of data.records) {
+    if (record.name !== 'plugin/phase' || record.instanceId !== instanceId || !record.payloadRef) continue
+    const payload = data.payloads[record.payloadRef] as { phase: string | null; reason: string | null; error: { name: string; message: string } | null }
+    const phase = String(payload.phase)
+    if (history.at(-1)?.phase === phase) continue
+    history.push({
+      seq: record.seq,
+      phase,
+      reason: payload.reason,
+      error: payload.error ? `${payload.error.name}: ${payload.error.message}` : null,
+      stepId: record.scenarioStepId,
+    })
+  }
+  return history
+}

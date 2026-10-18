@@ -2,7 +2,7 @@
 /** 整体组合 workspace: tree, selection summary, timeline and request comparison (docs/01 §3.1, §4). */
 import { useEffect, useState } from 'react'
 import { useExplorer, shownComposition, instanceById } from '@/lib/store'
-import { useReplay } from '@/lib/replay'
+import { phaseHistory, useReplay } from '@/lib/replay'
 import { PluginList, PluginTree } from './PluginTree'
 import { Inspector, PluginLibrary, RunBar, Timeline, outcomeText } from './Panels'
 import { RequestDiff } from './RequestDiff'
@@ -170,6 +170,9 @@ export function Workbench() {
           onRemove={id => void updateInstances(instances => instances.filter(item => item.id !== id))}
           onStage={(id, stageId) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, stageId } : item)))}
           onEnabled={(id, enabled) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, enabled } : item)))}
+          history={phaseHistory(selected, instance?.id)}
+          seq={replay.seq}
+          onCursor={state.setCursor}
         />
       </div>
 
