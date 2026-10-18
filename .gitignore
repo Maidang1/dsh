@@ -3,3 +3,4 @@ dist/
 .explorer/
 *.tsbuildinfo
 coverage/
+.cache/

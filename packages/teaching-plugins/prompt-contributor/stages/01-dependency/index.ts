@@ -4,7 +4,7 @@
  * again whenever the service comes back after being lost.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import '../../../system-prompt/stages/main/index.ts'
+import type {} from '../../../system-prompt/stages/main/index.ts'
 
 export const name = 'prompt-contributor'
 

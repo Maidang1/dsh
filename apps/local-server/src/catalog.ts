@@ -1,13 +1,16 @@
 /** What the control service can run: executable stages, scenarios and model scripts. */
-import { readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ModelScript, Scenario } from '@harness-explorer/contracts'
 import type { ExecutableStageDefinition, JsonValue } from '@harness-explorer/contracts'
 import { devStages } from '@harness-explorer/teaching-plugins'
+import { LessonBuild } from '@harness-explorer/lesson-kit'
 import { hashJson } from '@harness-explorer/trace'
 
 export interface Catalog {
+  /** Built lessons with stage code, when the catalog comes from `pnpm lessons:build`. */
+  lessons?: LessonBuild
   contentVersion: string
   runtimeVersion: string
   upstreamCommit: string
@@ -41,5 +44,28 @@ export function loadDevCatalog(root = repoRoot): Catalog {
     stages: devStages,
     scenarios: readDir(join(root, 'fixtures/scenarios'), value => Scenario.parse(value)),
     modelScripts: readDir(join(root, 'fixtures/model-scripts'), value => ModelScript.parse(value)),
+  }
+}
+
+/**
+ * Built catalog: executable stages are the bundled modules from lessons.json,
+ * so the code a lesson shows and the code a run executes share one sourceHash.
+ */
+export function loadBuiltCatalog(root = repoRoot): Catalog | null {
+  const path = join(root, 'packages/teaching-plugins/dist/lessons.json')
+  if (!existsSync(path)) return null
+  const lessons = LessonBuild.parse(JSON.parse(readFileSync(path, 'utf8')))
+  const dev = loadDevCatalog(root)
+  if (lessons.upstreamCommit !== dev.upstreamCommit) {
+    throw new Error(`lessons.json was built for ${lessons.upstreamCommit}, upstream-lock.json pins ${dev.upstreamCommit}`)
+  }
+  return {
+    ...dev,
+    lessons,
+    contentVersion: lessons.contentVersion,
+    stages: lessons.stages.map(stage => ({
+      ...stage.definition,
+      module: isAbsolute(stage.modulePath) ? stage.modulePath : join(root, stage.modulePath),
+    })),
   }
 }

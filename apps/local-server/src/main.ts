@@ -1,7 +1,7 @@
 /** `pnpm explorer`: open the run store, recover interrupted runs, serve the app. */
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
-import { loadDevCatalog } from './catalog.ts'
+import { loadBuiltCatalog, loadDevCatalog } from './catalog.ts'
 import { RunController } from './controller.ts'
 import { startServer } from './server.ts'
 import { RunStore } from './store.ts'
@@ -11,7 +11,9 @@ const store = new RunStore(join(repoRoot, '.explorer'))
 const recovered = await store.recoverInterrupted()
 if (recovered.length) console.log(`marked ${recovered.length} unfinished run(s) as interrupted`)
 
-const catalog = loadDevCatalog()
+const built = loadBuiltCatalog()
+if (!built) console.log('lessons are not built; running stages from source (run `pnpm lessons:build`)')
+const catalog = built ?? loadDevCatalog()
 const controller = new RunController({ store, catalog, runTimeoutMs: 5 * 60_000 })
 const server = await startServer({
   store,

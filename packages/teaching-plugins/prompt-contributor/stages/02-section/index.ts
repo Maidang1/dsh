@@ -4,7 +4,7 @@
  * the section without any cleanup code here.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import '../../../system-prompt/stages/main/index.ts'
+import type {} from '../../../system-prompt/stages/main/index.ts'
 
 export const name = 'prompt-contributor'
 

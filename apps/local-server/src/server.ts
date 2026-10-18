@@ -197,6 +197,16 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
     switch (route) {
       case 'GET /catalog':
         return sendJson(response, 200, publicCatalog(catalog))
+      case 'GET /lessons': {
+        const lessons = catalog.lessons
+        if (!lessons) throw new HttpError(404, 'lessons are not built; run pnpm lessons:build')
+        return sendJson(response, 200, {
+          contentVersion: lessons.contentVersion,
+          upstreamCommit: lessons.upstreamCommit,
+          lessons: lessons.lessons,
+          stages: lessons.stages.map(({ modulePath: _modulePath, definition: { module: _module, ...definition }, ...stage }) => ({ ...stage, definition })),
+        })
+      }
       case 'GET /state':
         return sendJson(response, 200, controller.state())
       case 'GET /drafts/:id':
