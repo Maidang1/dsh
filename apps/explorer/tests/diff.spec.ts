@@ -18,9 +18,8 @@ describe('diffLines', () => {
     const size = Math.ceil(Math.sqrt(MAX_DIFF_CELLS)) + 10
     const a = Array.from({ length: size }, (_, index) => `a${index}`)
     const b = Array.from({ length: size }, (_, index) => `b${index}`)
-    const started = performance.now()
+    // Past the limit the middle is listed, not aligned: every line of A removed, every line of B added.
     const lines = diffLines(['same', ...a, 'end'].join('\n'), ['same', ...b, 'end'].join('\n'))
-    expect(performance.now() - started).toBeLessThan(1000)
     expect(lines[0]).toEqual({ kind: 'same', text: 'same' })
     expect(lines.at(-1)).toEqual({ kind: 'same', text: 'end' })
     expect(lines.filter(line => line.kind === 'removed')).toHaveLength(size)

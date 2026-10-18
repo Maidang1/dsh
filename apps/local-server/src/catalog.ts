@@ -1,6 +1,6 @@
 /** What the control service can run: executable stages, scenarios and model scripts. */
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { isAbsolute, join } from 'node:path'
+import { isAbsolute, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Composition, ModelScript, Scenario } from '@harness-explorer/contracts'
 import type { ExecutableStageDefinition, JsonValue, PluginResponsibility } from '@harness-explorer/contracts'
@@ -93,10 +93,17 @@ export function loadDevCatalog(root = repoRoot): Catalog {
 export function loadBuiltCatalog(root = repoRoot): Catalog | null {
   const path = join(root, 'packages/teaching-plugins/dist/lessons.json')
   if (!existsSync(path)) return null
-  const parsed = LessonBuild.safeParse(JSON.parse(readFileSync(path, 'utf8')))
+  const rebuild = (reason: string) => new Error(`${relative(root, path)} ${reason}; run pnpm lessons:build`)
+  let raw: unknown
+  try {
+    raw = JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    throw rebuild(`is not readable JSON (${error instanceof Error ? error.message : String(error)})`)
+  }
+  const parsed = LessonBuild.safeParse(raw)
   if (!parsed.success) {
     const issue = parsed.error.issues[0]
-    throw new Error(`${path.slice(root.length)} does not match this version (${issue?.path.join('.')}: ${issue?.message}); run pnpm lessons:build`)
+    throw rebuild(`does not match this version (${issue?.path.join('.')}: ${issue?.message})`)
   }
   const lessons = parsed.data
   const dev = loadDevCatalog(root)

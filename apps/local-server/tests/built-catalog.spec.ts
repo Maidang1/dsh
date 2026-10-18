@@ -11,7 +11,7 @@ import type { LessonBuild } from '@harness-explorer/lesson-kit'
 import type { Composition } from '@harness-explorer/contracts'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildOptions, repoRoot } from '../../../scripts/lesson-env.ts'
-import { loadDevCatalog, verifyBuiltStages } from '../src/catalog.ts'
+import { loadBuiltCatalog, loadDevCatalog, verifyBuiltStages } from '../src/catalog.ts'
 import { RunController } from '../src/controller.ts'
 import { commitDraft } from '../src/experiments.ts'
 import { RunStore } from '../src/store.ts'
@@ -123,5 +123,23 @@ describe('config keys at commit time (CTX-04)', () => {
     composition.instances = composition.instances.map(instance => (instance.id === 'prompt-contributor' ? { ...instance, config: { text: '只用一句话' } } : instance))
     const fixed = await store.saveDraft({ ...draft, composition }, draft.version)
     await expect(commitDraft(store, catalog, fixed)).resolves.toMatchObject({ composition })
+  })
+})
+
+describe('an unusable lessons.json', () => {
+  it.each([
+    ['cut-off JSON', '{"schemaVersion": 1, "lessons": [', /packages\/teaching-plugins\/dist\/lessons\.json is not readable JSON .*; run pnpm lessons:build/],
+    ['a build from another version', JSON.stringify({ schemaVersion: 1, contentVersion: 'x', upstreamCommit: 'y', stages: [], lessons: [{ id: 'l' }] }), /packages\/teaching-plugins\/dist\/lessons\.json does not match this version .*; run pnpm lessons:build/],
+  ])('names the file and the fix for %s', async (_name, content, message) => {
+    const root = await mkdtemp(join(tmpdir(), 'explorer-lessons-'))
+    try {
+      await mkdir(join(root, 'packages/teaching-plugins/dist'), { recursive: true })
+      for (const dir of ['fixtures/scenarios', 'fixtures/model-scripts', 'fixtures/compositions']) await mkdir(join(root, dir), { recursive: true })
+      await writeFile(join(root, 'upstream-lock.json'), await readFile(join(repoRoot, 'upstream-lock.json'), 'utf8'))
+      await writeFile(join(root, 'packages/teaching-plugins/dist/lessons.json'), content)
+      expect(() => loadBuiltCatalog(root)).toThrow(message)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })

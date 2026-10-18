@@ -4,9 +4,14 @@ import type { TraceRecord } from '@harness-explorer/contracts'
 
 const PREFIX = 'checkpoint/'
 
-/** Records before run/settle: the scenario itself, not the settlement that unloads everything. */
+/** Index of the run/settle record, or -1: what follows is settlement (unloading everything), not the scenario. */
+export function settleIndex(records: readonly TraceRecord[]): number {
+  return records.findIndex(record => record.name === TraceName.runSettle)
+}
+
+/** Records before run/settle: the scenario itself. */
 export function scenarioPart(records: readonly TraceRecord[]): readonly TraceRecord[] {
-  const settle = records.findIndex(record => record.name === TraceName.runSettle)
+  const settle = settleIndex(records)
   return settle < 0 ? records : records.slice(0, settle)
 }
 

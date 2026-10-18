@@ -75,8 +75,10 @@ async function buildStage(stage: ExecutableStageDefinition, options: BuildOption
     }
   }
 
-  await checkDeclaredRequires(stage)
-  const configKeys = await checkConfigSchema(stage, files[0]!.content)
+  // One import of the stage's source module serves both checks.
+  const module = await import(pathToFileURL(stage.module).href) as StageModule
+  checkDeclaredRequires(stage, module)
+  const configKeys = checkConfigSchema(stage, module, files[0]!.content)
   const modulePath = toPosix(relative(options.repoRoot, outfile))
   const moduleHash = sha256(await readFile(outfile, 'utf8'))
   return { definition: { ...stage, module: modulePath, sourceHash, configKeys }, modulePath, moduleHash, files, sourceRefs }
@@ -88,8 +90,10 @@ async function buildStage(stage: ExecutableStageDefinition, options: BuildOption
  * class. A catalog entry that disagrees fails the build instead of drawing
  * wrong dependency edges and validating compositions against stale needs.
  */
-async function checkDeclaredRequires(stage: ExecutableStageDefinition) {
-  const module = await import(pathToFileURL(stage.module).href) as { inject?: unknown; default?: { inject?: unknown } }
+type ConfigSchema = { type?: string; dict?: Record<string, unknown> }
+type StageModule = { inject?: unknown; Config?: ConfigSchema; default?: { inject?: unknown; Config?: ConfigSchema } }
+
+function checkDeclaredRequires(stage: ExecutableStageDefinition, module: StageModule) {
   const declared = module.inject ?? module.default?.inject ?? []
   if (!Array.isArray(declared)) throw new LessonBuildError(`stage ${stage.id} declares inject as an object; only service lists are supported`)
   const actual = [...declared].map(String).sort()
@@ -104,15 +108,15 @@ async function checkDeclaredRequires(stage: ExecutableStageDefinition) {
  * refuses every key of a stage without one, so a config interface with no
  * schema would make all of its options unusable. Returns the schema's keys.
  */
-async function checkConfigSchema(stage: ExecutableStageDefinition, entrySource: string): Promise<string[]> {
-  type Schema = { dict?: Record<string, unknown> }
-  const module = await import(pathToFileURL(stage.module).href) as { Config?: Schema; default?: { Config?: Schema } }
+function checkConfigSchema(stage: ExecutableStageDefinition, module: StageModule, entrySource: string): string[] | undefined {
   const schema = module.Config ?? module.default?.Config
   if (/export interface Config\b/.test(entrySource) && !schema) {
     throw new LessonBuildError(`stage ${stage.id} declares interface Config but exports no Config schema`)
   }
-  // The keys commit-time validation accepts; a stage without a schema takes none.
-  return Object.keys(schema?.dict ?? {})
+  // The keys commit-time validation accepts: none without a schema. A schema that is not a
+  // plain object schema records nothing, so only the runner's own validation applies, as there.
+  if (!schema) return []
+  return schema.type === 'object' && schema.dict ? Object.keys(schema.dict) : undefined
 }
 
 async function importData(path: string): Promise<unknown> {

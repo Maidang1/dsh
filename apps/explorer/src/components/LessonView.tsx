@@ -108,8 +108,12 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
   const runStage = selected?.revision?.composition.instances.find(instance => instance.definitionId === lesson.pluginDefinitionId)?.stageId
   // The run's own manifest says which code it ran; a run without a recorded hash for the stage is not this code.
   const ranHash = selected?.loadedSourceHashes?.[stage.codeStageId]
-  const otherCode = runStage === stage.codeStageId && selected?.loadedSourceHashes != null && ranHash !== stage.sourceHash
-  const runMatches = runStage === stage.codeStageId && ranHash === stage.sourceHash
+  const codeVersion = runStage !== stage.codeStageId ? 'other-stage'
+    : selected?.loadedSourceHashes == null ? 'loading'
+      : ranHash === undefined ? 'unrecorded'
+        : ranHash === stage.sourceHash ? 'match' : 'other'
+  const otherCode = codeVersion === 'other' || codeVersion === 'unrecorded'
+  const runMatches = codeVersion === 'match'
   const replay = useReplay(runMatches ? selected : undefined, null)
   const busy = state.runtime !== null && state.runtime.phase !== 'idle'
   const completedStages = useMemo(() => new Set(lessonProgress?.completed.map(item => item.stageId)), [lessonProgress])
@@ -163,7 +167,12 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
         <h1>{lesson.title}</h1>
         <span className="muted">阶段 {index + 1}/{views.length} · {stage.title}</span>
         <span className="badge" aria-label="对应运行">
-          {!selected ? '尚无运行' : runMatches ? `运行 ${selected.runId} · 回放 #${replay.seq}（场景结束时）` : otherCode ? `所选运行 ${selected.runId} 执行的是此阶段的另一版代码` : `所选运行 ${selected.runId} 未执行此阶段`}
+          {!selected ? '尚无运行'
+            : runMatches ? `运行 ${selected.runId} · 回放 #${replay.seq}（场景结束时）`
+              : codeVersion === 'loading' ? `正在读取运行 ${selected.runId} 的代码版本`
+                : codeVersion === 'other' ? `所选运行 ${selected.runId} 执行的是此阶段的另一版代码`
+                  : codeVersion === 'unrecorded' ? `所选运行 ${selected.runId} 没有记录此阶段的代码版本`
+                    : `所选运行 ${selected.runId} 未执行此阶段`}
         </span>
         {stage.kind === 'executable' ? (
           <button
@@ -255,9 +264,13 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
 
           {tab === 'state' ? (
             <div className="stage-state">
-              {!selected ? <p className="muted">当前阶段尚未运行。点击“运行此阶段”。</p> : otherCode ? (
+              {!selected ? <p className="muted">当前阶段尚未运行。点击“运行此阶段”。</p> : codeVersion === 'loading' ? (
+                <p className="muted">正在读取运行 {selected.runId} 的代码版本。</p>
+              ) : codeVersion === 'unrecorded' ? (
+                <p className="warning-text">所选运行 {selected.runId} 没有记录 {stage.codeStageId} 的代码版本，不能确认它执行的是当前展示的代码，结果不对应到当前代码。运行此阶段以查看当前代码的结果。</p>
+              ) : otherCode ? (
                 <p className="warning-text">
-                  所选运行 {selected.runId} 执行的 {stage.codeStageId} 来自另一版代码（sourceHash {ranHash?.slice(7, 19) ?? '未知'}，当前展示 {stage.sourceHash.slice(7, 19)}），它的结果不对应到当前代码。可在整体组合中只读回放它；运行此阶段以查看当前代码的结果。
+                  所选运行 {selected.runId} 执行的 {stage.codeStageId} 来自另一版代码（sourceHash {ranHash?.slice(7, 19)}，当前展示 {stage.sourceHash.slice(7, 19)}），它的结果不对应到当前代码。可在整体组合中只读回放它；运行此阶段以查看当前代码的结果。
                 </p>
               ) : !runMatches ? (
                 <p className="warning-text">所选运行 {selected.runId} 执行的是 {runStage ?? '（无此插件）'}，与当前阅读阶段 {stage.codeStageId} 不同。运行此阶段以查看它的结果。</p>
@@ -270,9 +283,9 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
                   {stage.expectedCheckpoints ? (
                     <>
                       <h3>检查点</h3>
-                      {selected.settled
-                        ? <CheckpointCheck expected={stage.expectedCheckpoints} recorded={recorded} />
-                        : <p className="muted">运行中，结束后核对检查点。</p>}
+                      {!selected.settled ? <p className="muted">运行中，结束后核对检查点。</p>
+                        : selected.gaps.length ? <p className="warning-text">轨迹有缺口，检查点无法完整核对。</p>
+                          : <CheckpointCheck expected={stage.expectedCheckpoints} recorded={recorded} />}
                     </>
                   ) : null}
                   <h3>注册项（场景结束时）</h3>
