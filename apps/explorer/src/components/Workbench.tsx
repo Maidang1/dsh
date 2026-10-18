@@ -198,7 +198,7 @@ export function Workbench() {
           <button type="button" role="tab" aria-selected={tab === 'diff'} onClick={() => setTab('diff')}>请求对比</button>
         </div>
         {tab === 'timeline'
-          ? <Timeline data={selected} seq={replay.seq} lastSeq={replay.lastSeq} onCursor={state.setCursor} />
+          ? <Timeline data={selected} seq={replay.seq} lastSeq={replay.lastSeq} onCursor={state.setCursor} lessons={state.lessons} onSelectInstance={select} />
           : <RequestDiff runs={state.runs} selected={selected} compare={state.compareRunId ? state.runData[state.compareRunId] : undefined} compareRunId={state.compareRunId} onCompareRun={runId => void state.setCompareRun(runId)} />}
       </section>
     </div>

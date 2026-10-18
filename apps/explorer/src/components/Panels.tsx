@@ -220,7 +220,7 @@ export function Inspector({ instance, stage, snapshot, lessons, editable, stages
       {registrations.length
         ? <ul>{registrations.map(item => <li key={item.registrationId}>{item.kind} · {item.name}（作用域 {item.scopeId}）</li>)}</ul>
         : <p className="muted">回放位置上没有注册项。</p>}
-      {lesson ? <p><Link className="button primary" href={`/plugin/${lesson.id}?instance=${encodeURIComponent(instance.id)}`}>进入插件实现</Link></p> : null}
+      {lesson ? <p><Link className="button primary" href={lessonHref(lesson.id, instance)}>进入插件实现</Link></p> : null}
       {editable ? (
         <div className="inspector__edit">
           <h3>编辑草稿</h3>
@@ -317,6 +317,36 @@ interface TimelineProps {
   seq: number
   lastSeq: number
   onCursor(seq: number | null): void
+  lessons: LessonsResponse | null
+  onSelectInstance(id: string): void
+}
+
+/** Link to a lesson opened at the stage an instance ran, so the code shown is the code that ran. */
+export const lessonHref = (lessonId: string, instance: PluginInstance) =>
+  `/plugin/${lessonId}?instance=${encodeURIComponent(instance.id)}&stage=${encodeURIComponent(instance.stageId)}`
+
+/**
+ * The record at the cursor and the instance it belongs to, with the stage
+ * taken from the run's own revision rather than the current draft.
+ */
+function CurrentRecord({ data, seq, lessons, onSelectInstance }: { data: RunData; seq: number; lessons: LessonsResponse | null; onSelectInstance(id: string): void }) {
+  const record = data.records[seq]
+  if (!record) return null
+  const instance = record.instanceId ? data.revision?.composition.instances.find(item => item.id === record.instanceId) : undefined
+  const lesson = instance ? lessons?.lessons.find(item => item.pluginDefinitionId === instance.definitionId) : undefined
+  const ranStage = lesson?.stages.some(stage => stage.codeStageId === instance?.stageId)
+  return (
+    <p className="timeline__current" aria-label="当前记录">
+      当前记录 #{record.seq} <code>{record.name}</code>
+      {instance ? (
+        <>
+          {' '}· 实例 {instance.id}（本次运行的阶段 {instance.stageId}）
+          {' '}<button type="button" className="link-button" onClick={() => onSelectInstance(instance.id)}>在插件树中选中</button>
+          {lesson && ranStage ? <>{' '}<Link className="link-button" href={lessonHref(lesson.id, instance)}>查看该阶段代码</Link></> : null}
+        </>
+      ) : record.instanceId ? ` · 实例 ${record.instanceId}` : null}
+    </p>
+  )
 }
 
 /** Cursor step interval at 1× playback. */
@@ -324,7 +354,7 @@ const PLAYBACK_MS = 400
 
 const KIND_FILTERS = ['全部', 'checkpoint', 'lifecycle', 'session', 'data', 'service', 'diagnostic'] as const
 
-export function Timeline({ data, seq, lastSeq, onCursor }: TimelineProps) {
+export function Timeline({ data, seq, lastSeq, onCursor, lessons, onSelectInstance }: TimelineProps) {
   const [filter, setFilter] = useState<(typeof KIND_FILTERS)[number]>('全部')
   const count = data?.records.length ?? 0
   const records = useMemo(
@@ -393,6 +423,7 @@ export function Timeline({ data, seq, lastSeq, onCursor }: TimelineProps) {
         </label>
         <span className="muted">回放只移动游标，不会重新执行插件。</span>
       </div>
+      <CurrentRecord data={data} seq={seq} lessons={lessons} onSelectInstance={onSelectInstance} />
       {data.gaps.length ? <p className="warning-text">轨迹缺口：{data.gaps.map(gap => `${gap.fromSeq}–${gap.toSeq}`).join('，')}，结果不完整。</p> : null}
       {data.settled ? <p className="muted">运行结果：{outcomeText(data.settled.outcome)}，最后序号 {data.settled.finalSeq}</p> : <p className="muted">运行未结算，结果尚不完整。</p>}
       {data.settled?.completeness === 'truncated' ? <p className="warning-text">轨迹不完整：达到采集上限、写盘失败或运行中断，缺失的尾部不能视为成功。</p> : null}

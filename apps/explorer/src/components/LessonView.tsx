@@ -54,8 +54,12 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
   useEffect(() => {
     if (restored.current || !state.progress) return
     restored.current = true
+    // A link from a run names the stage that ran; it wins over the saved reading position.
+    const linked = new URLSearchParams(window.location.search).get('stage')
+    const fromLink = linked ? views.findIndex(item => item.stage.kind === 'executable' && item.stage.codeStageId === linked) : -1
     const saved = views.findIndex(item => item.stage.id === lessonProgress?.lastStageId)
-    if (saved > 0) setIndex(saved)
+    if (fromLink >= 0) setIndex(fromLink)
+    else if (saved > 0) setIndex(saved)
   }, [state.progress, lessonProgress, views])
   useEffect(() => {
     if (!restored.current) return

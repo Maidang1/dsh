@@ -139,3 +139,26 @@ test('shows a waiting instance as waiting for a service and offers its provider'
   }
 
 })
+
+test('a trace record leads to its instance and the code of the stage that ran', async ({ page }) => {
+  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
+  await page.goto('/')
+  await page.getByRole('button', { name: '运行教学代码' }).click()
+  await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
+  const runId = await page.getByLabel('查看运行').inputValue()
+  const { records } = await page.request.get(`/api/runs/${runId}/trace`).then(response => response.json()) as { records: Array<{ seq: number; instanceId?: string }> }
+  const target = records.find(record => record.instanceId === 'prompt-contributor')!
+
+  await page.getByRole('slider', { name: '回放位置' }).fill(String(target.seq))
+  const current = page.getByLabel('当前记录')
+  await expect(current).toContainText(`当前记录 #${target.seq}`)
+  await expect(current).toContainText('实例 prompt-contributor（本次运行的阶段 prompt-contributor@02-section）')
+  await current.getByRole('button', { name: '在插件树中选中' }).click()
+  await expect(page.locator('.inspector h2')).toHaveText('prompt-contributor')
+  await current.getByRole('link', { name: '查看该阶段代码' }).click()
+  await expect(page.getByText(/^阶段 \d\/\d · 注册提示词片段$/)).toBeVisible()
+
+  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
+    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: { origin: new URL(page.url()).origin } })
+  }
+})
