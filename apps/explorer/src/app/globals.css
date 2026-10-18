@@ -79,7 +79,9 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 .workbench__bottom { border-top: 1px solid var(--border); padding: 8px 16px; max-height: 45vh; min-height: 200px; overflow: auto; background: var(--surface); }
 
 .library { position: relative; }
-.library__list { position: absolute; z-index: 10; top: 100%; left: 0; width: 360px; max-height: 60vh; overflow: auto; list-style: none; margin: 4px 0 0; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgb(0 0 0 / .15); }
+.library__panel { position: absolute; z-index: 10; top: 100%; left: 0; width: 360px; max-height: 60vh; overflow: auto; margin: 4px 0 0; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgb(0 0 0 / .15); }
+.library__panel .segmented { flex-wrap: wrap; }
+.library__list { list-style: none; margin: 8px 0 0; padding: 0; }
 .library__list li { padding: 8px 4px; border-bottom: 1px solid var(--border); display: grid; gap: 4px; }
 
 .scope-node { background: transparent; border: 1px dashed var(--border); border-radius: 10px; }

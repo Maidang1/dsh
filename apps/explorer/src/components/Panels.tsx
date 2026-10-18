@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { TimelineRows } from './TimelineRows'
-import type { AdapterMode, EnvironmentSnapshot, PluginInstance, RuntimeState } from '@harness-explorer/contracts'
+import type { AdapterMode, EnvironmentSnapshot, PluginInstance, PluginResponsibility, RuntimeState } from '@harness-explorer/contracts'
 import type { ViewSnapshot } from '@harness-explorer/trace/browser'
 import type { Draft, LessonsResponse, PublicCatalog, PublicStage } from '@/lib/api'
 import type { RunData } from '@/lib/store'
@@ -159,28 +159,52 @@ export function Inspector({ instance, stage, snapshot, lessons, editable, stages
   )
 }
 
+const RESPONSIBILITY_LABEL: Record<PluginResponsibility, string> = {
+  'session': '会话',
+  'prompt': '提示词',
+  'tool': '工具',
+  'event-policy': '事件策略',
+  'model': '模型适配',
+  'agent-loop': '执行循环',
+}
+
+const responsibilityLabel = (responsibility: PluginResponsibility | undefined) => responsibility ? RESPONSIBILITY_LABEL[responsibility] : '未分类'
+
 interface LibraryProps {
   stages: readonly PublicStage[]
+  responsibilities: Readonly<Record<string, PluginResponsibility>>
   draft: Draft
   /** Stages to add to the root scope, dependencies first. */
   onAdd(stages: PublicStage[]): void
 }
 
-export function PluginLibrary({ stages, draft, onAdd }: LibraryProps) {
+export function PluginLibrary({ stages, responsibilities, draft, onAdd }: LibraryProps) {
   const [open, setOpen] = useState(false)
+  const [filter, setFilter] = useState<PluginResponsibility | null>(null)
   const definitions = useMemo(() => latestStages(stages), [stages])
+  const present = (Object.keys(RESPONSIBILITY_LABEL) as PluginResponsibility[])
+    .filter(responsibility => definitions.some(stage => responsibilities[stage.pluginDefinitionId] === responsibility))
   const add = (selected: PublicStage[]) => { onAdd(selected); setOpen(false) }
   return (
     <div className="library">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}>添加插件</button>
       {open ? (
+        <div className="library__panel">
+        <div className="segmented" role="group" aria-label="按职责筛选">
+          <button type="button" aria-pressed={filter === null} onClick={() => setFilter(null)}>全部</button>
+          {present.map(responsibility => (
+            <button key={responsibility} type="button" aria-pressed={filter === responsibility} onClick={() => setFilter(responsibility)}>
+              {RESPONSIBILITY_LABEL[responsibility]}
+            </button>
+          ))}
+        </div>
         <ul className="library__list">
-          {definitions.map(latest => {
+          {definitions.filter(latest => filter === null || responsibilities[latest.pluginDefinitionId] === filter).map(latest => {
             const plan = planAddition(stages, draft.composition.instances, latest)
             const missing = [...plan.providers.map(item => item.service), ...plan.unresolved]
             return (
               <li key={latest.pluginDefinitionId}>
-                <strong>{latest.pluginDefinitionId}</strong> <span className="muted">{latest.id}</span>
+                <strong>{latest.pluginDefinitionId}</strong> <span className="muted">{latest.id} · {responsibilityLabel(responsibilities[latest.pluginDefinitionId])}</span>
                 <div className="muted">需要：{latest.requires.join('、') || '无'} · 提供：{latest.provides.join('、') || '无'}</div>
                 {missing.length ? (
                   <div className="warning-text">
@@ -197,6 +221,7 @@ export function PluginLibrary({ stages, draft, onAdd }: LibraryProps) {
             )
           })}
         </ul>
+        </div>
       ) : null}
     </div>
   )

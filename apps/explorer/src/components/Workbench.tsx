@@ -135,6 +135,7 @@ export function Workbench() {
         </label>
         <PluginLibrary
           stages={catalog.stages}
+          responsibilities={catalog.responsibilities}
           draft={draft}
           onAdd={selected => void updateInstances(instances => [...instances, ...instancesFor(selected, instances)])}
         />

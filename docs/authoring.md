@@ -29,7 +29,7 @@ pnpm lessons:build && pnpm lessons:verify
 1. **确定学习问题**：在固定 commit（`upstream-lock.json`）上阅读上游实现、类型与测试，只选一个机制，例如“around 中间件如何短路”。
 2. **写契约**：在 `docs/contracts/` 增加或复用契约条目，写明保留、替代与不支持的范围，并在对应包的 `tests/` 中写测试。阶段的 `contractIds` 只能引用已存在的契约编号，构建会核对。
 3. **先写最终版本**：在最后一个阶段目录实现精简插件，跑通契约测试。每个文件头部注明对应的上游路径与删减的行为。
-4. **拆阶段**：把最终实现拆成少量阶段（`00-…`、`01-…`），每个阶段目录都是完整可运行的副本，不是 diff。每个阶段在 `catalog.ts` 登记一行；`requires` 必须与源码 `inject` 的服务一致，构建会拒绝不一致的声明；`provides` 由 `lessons:verify` 对照运行中该实例实际提供的服务核对。
+4. **拆阶段**：把最终实现拆成少量阶段（`00-…`、`01-…`），每个阶段目录都是完整可运行的副本，不是 diff。每个阶段在 `catalog.ts` 登记一行，并在同一文件的 `responsibilities` 中为插件定义选择职责（插件库按它筛选，`pnpm test` 检查每个定义都已分类）；`requires` 必须与源码 `inject` 的服务一致，构建会拒绝不一致的声明；`provides` 由 `lessons:verify` 对照运行中该实例实际提供的服务核对。
 5. **配置场景**：在 `fixtures/scenarios/` 写步骤（input、mount、unmount、snapshot、cancel），模型回复写在 `fixtures/model-scripts/`。需要在轨迹里标出教学位置时，调用 `shared/checkpoint.ts` 的 `checkpoint(ctx, '<id>:<名字>', 数据)`。不手写成功结果，一切观察都来自实际运行。
 6. **写架构与讲解**：`architecture.ts` 的每个节点用 `sourceRefIds`（`<id>@<阶段>#<锚点>`）指向具体代码；`lesson.mdx` 区分代码事实与设计解读，未执行的路径标为静态关系。
 7. **预览增量**：`pnpm build && pnpm explorer`，在课程页逐阶段查看 Code Hike 增量，确认每步只引入少量新概念，`focusAnchors` 落在本阶段的变化上。

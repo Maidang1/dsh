@@ -106,6 +106,7 @@ function publicCatalog(catalog: Catalog) {
     contentVersion: catalog.contentVersion,
     upstreamCommit: catalog.upstreamCommit,
     stages: catalog.stages.map(({ module: _module, ...stage }) => stage),
+    responsibilities: catalog.responsibilities,
     scenarios: Object.values(catalog.scenarios),
   }
 }

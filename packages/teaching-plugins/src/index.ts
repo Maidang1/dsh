@@ -9,4 +9,4 @@ export type { PostToolDecision, PreToolDecision, ToolDefinition, ToolEntry, Tool
 export type { PreStep, PreStepDecision, TurnEndReason } from '../agent-loop/stages/main/index.ts'
 export { ROOT_SCOPE, SCOPE_CHAIN, scopeChainOf, withScopeChain } from '../shared/scope.ts'
 export { checkpoint } from '../shared/checkpoint.ts'
-export { devStages } from './catalog.ts'
+export { devStages, responsibilities } from './catalog.ts'

@@ -134,5 +134,9 @@ export const EnvironmentSnapshot = z.object({
 })
 export type EnvironmentSnapshot = z.infer<typeof EnvironmentSnapshot>
 
+/** What a plugin definition is for; the plugin library filters by it (docs/01 §5.1). */
+export const PluginResponsibility = z.enum(['session', 'prompt', 'tool', 'event-policy', 'model', 'agent-loop'])
+export type PluginResponsibility = z.infer<typeof PluginResponsibility>
+
 export const AdapterMode = z.enum(['deterministic', 'real'])
 export type AdapterMode = z.infer<typeof AdapterMode>

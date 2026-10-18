@@ -6,6 +6,7 @@ import type {
   ExecutableStageDefinition,
   ExperimentRevision,
   JsonValue,
+  PluginResponsibility,
   RunManifest,
   RuntimeState,
   Scenario,
@@ -19,6 +20,7 @@ export interface PublicCatalog {
   contentVersion: string
   upstreamCommit: string
   stages: PublicStage[]
+  responsibilities: Record<string, PluginResponsibility>
   scenarios: Scenario[]
 }
 

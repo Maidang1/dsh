@@ -84,3 +84,16 @@ test('adds a plugin together with the providers of its missing services', async 
   const response = await page.request.put('/api/drafts/main', { data: { expectedVersion: version, draft }, headers: { origin: new URL(page.url()).origin } })
   expect(response.ok()).toBe(true)
 })
+
+test('filters the plugin library by responsibility', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加插件' }).click()
+  const filter = page.getByRole('group', { name: '按职责筛选' })
+  const names = page.locator('.library__list li strong')
+  await filter.getByRole('button', { name: '工具' }).click()
+  await expect(names).toHaveText(['tools', 'calculator'])
+  await filter.getByRole('button', { name: '事件策略' }).click()
+  await expect(names).toHaveText(['tool-guard'])
+  await filter.getByRole('button', { name: '全部' }).click()
+  await expect(names).toHaveCount(10)
+})

@@ -2,7 +2,7 @@
  * Development catalog of executable stages, loaded straight from source.
  * lesson-kit replaces `module` and `sourceHash` with built artifacts.
  */
-import type { ExecutableStageDefinition } from '@harness-explorer/contracts'
+import type { ExecutableStageDefinition, PluginResponsibility } from '@harness-explorer/contracts'
 import { fileURLToPath } from 'node:url'
 
 const source = (path: string) => fileURLToPath(new URL(`../${path}/index.ts`, import.meta.url))
@@ -36,3 +36,17 @@ export const devStages: readonly ExecutableStageDefinition[] = [
   stage('tool-guard', '01-two-layers', ['tools'], []),
   stage('tool-guard', '02-deny', ['tools'], []),
 ]
+
+/** Responsibility of each plugin definition in devStages. */
+export const responsibilities: Readonly<Record<string, PluginResponsibility>> = {
+  'session': 'session',
+  'system-prompt': 'prompt',
+  'tools': 'tool',
+  'llm': 'model',
+  'llm-scripted': 'model',
+  'llm-deepseek': 'model',
+  'agent-loop': 'agent-loop',
+  'prompt-contributor': 'prompt',
+  'calculator': 'tool',
+  'tool-guard': 'event-policy',
+}
