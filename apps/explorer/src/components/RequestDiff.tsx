@@ -1,11 +1,13 @@
 'use client'
 /**
- * Before/after comparison of model requests (docs/01 §7). It shows whether the
- * two sides are strictly comparable before attributing a difference.
+ * Before/after comparison (docs/01 §7): model requests, and between two runs
+ * also the registry, execution process and session records. It shows whether
+ * the two sides are strictly comparable before attributing a difference.
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { RunManifest } from '@harness-explorer/contracts'
 import { diffLines, requestsOf } from '@/lib/replay'
+import { processLines, registryDiff, sessionLines } from '@/lib/compare'
 import type { RequestEntry } from '@/lib/replay'
 import type { RunData } from '@/lib/store'
 
@@ -17,9 +19,9 @@ interface Props {
   onCompareRun(runId: string | null): void
 }
 
-function Diff({ before, after }: { before: string; after: string }) {
+function Diff({ before, after, showSame = false }: { before: string; after: string; showSame?: boolean }) {
   const lines = diffLines(before, after)
-  if (lines.every(line => line.kind === 'same')) return <p className="muted">无差异</p>
+  if (!showSame && lines.every(line => line.kind === 'same')) return <p className="muted">无差异</p>
   return (
     <pre className="diff">
       {lines.map((line, index) => (
@@ -30,6 +32,38 @@ function Diff({ before, after }: { before: string; after: string }) {
         </div>
       ))}
     </pre>
+  )
+}
+
+/** Large sections start collapsed behind a summary of how much changed. */
+function Section({ title, before, after }: { title: string; before: string[]; after: string[] }) {
+  const lines = diffLines(before.join('\n'), after.join('\n'))
+  const added = lines.filter(line => line.kind === 'added').length
+  const removed = lines.filter(line => line.kind === 'removed').length
+  return (
+    <details className="run-diff__section">
+      <summary>{title}：{added || removed ? `新增 ${added} 行，删除 ${removed} 行` : '无差异'}（共 {after.length} 行）</summary>
+      <Diff before={before.join('\n')} after={after.join('\n')} showSame />
+    </details>
+  )
+}
+
+/** Registry, process and session differences between the selected run (A) and the comparison run (B). */
+function RunDiff({ a, b }: { a: RunData; b: RunData }) {
+  const registry = useMemo(() => registryDiff(a, b), [a, b])
+  const process = useMemo(() => [processLines(a), processLines(b)] as const, [a, b])
+  const sessions = useMemo(() => [sessionLines(a), sessionLines(b)] as const, [a, b])
+  const CHANGE = { added: '新增', removed: '移除', changed: '内容变化' } as const
+  return (
+    <section className="run-diff" aria-label="运行对比">
+      <h3>运行对比：{a.runId}（A）→ {b.runId}（B），截至场景结束</h3>
+      <h4>注册表</h4>
+      {registry.length
+        ? <ul>{registry.map(item => <li key={item.registrationId} className={`diff__${item.change === 'removed' ? 'removed' : 'added'}`}>{CHANGE[item.change]}：{item.label}</li>)}</ul>
+        : <p className="muted">无差异</p>}
+      <Section title="执行过程（状态变化、分发、检查点、诊断）" before={process[0]} after={process[1]} />
+      <Section title="会话记录（持久事件）" before={sessions[0]} after={sessions[1]} />
+    </section>
   )
 }
 
@@ -51,6 +85,8 @@ export function RequestDiff({ runs, selected, compare, compareRunId, onCompareRu
   const runOf = (entry: RequestEntry | undefined) => (entry?.key.startsWith(`${compare?.runId}:`) && compare?.runId !== selected?.runId ? compare : selected)
   const revisionA = runOf(a)?.revision
   const revisionB = runOf(b)?.revision
+  const modeOf = (data: RunData | undefined) => runs.find(run => run.runId === data?.runId)?.adapterMode
+  const real = [runOf(a), runOf(b)].some(data => modeOf(data) === 'real')
   const conditions = revisionA && revisionB ? [
     { label: '场景版本', same: revisionA.scenarioHash === revisionB.scenarioHash },
     { label: '种子', same: revisionA.seed === revisionB.seed },
@@ -84,9 +120,10 @@ export function RequestDiff({ runs, selected, compare, compareRunId, onCompareRu
       {!a || !b ? <p className="muted">至少需要一次模型请求。</p> : (
         <>
           {conditions.length ? (
-            <p className={conditions.every(item => item.same || item.label === '组合') ? 'muted' : 'warning-text'}>
+            <p className={!real && conditions.every(item => item.same || item.label === '组合') ? 'muted' : 'warning-text'}>
               对照条件：{conditions.map(item => `${item.label}${item.same ? '相同' : '不同'}`).join('，')}。
               {conditions.some(item => !item.same && item.label !== '组合') ? '条件不一致，差异不能只归因于插件变化。' : ''}
+              {real ? '包含真实模型的运行无法保证输出一致，只作带环境说明的观察对比。' : ''}
             </p>
           ) : null}
           <h3>system</h3>
@@ -97,6 +134,7 @@ export function RequestDiff({ runs, selected, compare, compareRunId, onCompareRu
           <Diff before={JSON.stringify(a.request.tools.map(tool => tool.name), null, 2)} after={JSON.stringify(b.request.tools.map(tool => tool.name), null, 2)} />
         </>
       )}
+      {selected && compare && compare.runId !== selected.runId ? <RunDiff a={selected} b={compare} /> : null}
     </section>
   )
 }

@@ -89,6 +89,21 @@ test('compares the request before and after the contributor is mounted', async (
   await expect(page.locator('.diff__added', { hasText: '回答时使用短句' }).first()).toBeVisible()
 })
 
+test('compares registry, process and session records with another run', async () => {
+  await page.getByRole('tab', { name: '请求对比' }).click()
+  const compare = page.getByLabel('对照运行')
+  // Any earlier run will do (the lesson specs leave some); the comparison is what is checked.
+  await compare.selectOption({ index: 1 })
+  const region = page.getByRole('region', { name: '运行对比' })
+  await expect(region).toContainText('截至场景结束')
+  await expect(region.getByRole('heading', { name: '注册表' })).toBeVisible()
+  await region.locator('summary', { hasText: '执行过程' }).click()
+  await expect(region.locator('.diff').first()).toContainText('agent-loop → active')
+  await expect(region.locator('summary', { hasText: '会话记录' })).toBeVisible()
+  await compare.selectOption('')
+  await expect(region).toHaveCount(0)
+})
+
 test('keeps the run after a reload and offers a text list of the tree', async () => {
   await page.reload()
   await expect(page.getByText('运行结果：已完成')).toBeVisible()
