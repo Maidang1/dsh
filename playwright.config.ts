@@ -17,7 +17,7 @@ export default defineConfig({
     launchOptions: { executablePath: process.env.PW_CHROMIUM ?? '/opt/pw-browsers/chromium' },
   },
   webServer: {
-    command: `rm -rf .explorer-e2e && EXPLORER_STORE=.explorer-e2e EXPLORER_PORT=${port} EXPLORER_TOKEN=${LAUNCH_TOKEN} pnpm -s explorer`,
+    command: `rm -rf .explorer-e2e && env -u DEEPSEEK_API_KEY EXPLORER_STORE=.explorer-e2e EXPLORER_PORT=${port} EXPLORER_TOKEN=${LAUNCH_TOKEN} pnpm -s explorer`,
     url: `http://127.0.0.1:${port}/`,
     reuseExistingServer: false,
     timeout: 60_000,

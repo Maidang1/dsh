@@ -60,12 +60,13 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
+let draftCounter = 0
 async function revisionWith(extra: string[] = [], scenarioId = 'prompt-section-lifecycle') {
   const composition = await minimalChat()
   for (const name of extra) {
     composition.instances.push({ id: name, definitionId: name, stageId: `${name}@test`, scopeId: 'root', parentId: null, enabled: true, config: {} })
   }
-  const draft = await store.saveDraft({ id: 'draft-1', parentRevisionId: null, composition, scenarioId, seed: 1 }, null)
+  const draft = await store.saveDraft({ id: `draft-${++draftCounter}`, parentRevisionId: null, composition, scenarioId, seed: 1 }, null)
   return commitDraft(store, catalog, draft)
 }
 
@@ -107,10 +108,13 @@ describe('run lifecycle through a subprocess', () => {
   })
 
   it('rejects invalid revisions before spawning anything', async () => {
-    const controller = new RunController({ store, catalog })
+    const { DEEPSEEK_API_KEY: _key, ...withoutKey } = process.env
+    const controller = new RunController({ store, catalog, env: withoutKey })
     await expect(controller.run('rev-missing', 'deterministic')).rejects.toMatchObject({ code: 'not-found' })
     const revision = await revisionWith()
-    await expect(controller.run(revision.id, 'real')).rejects.toThrow(/does not support real mode/)
+    await expect(controller.run(revision.id, 'real')).rejects.toThrow(/real mode needs DEEPSEEK_API_KEY/)
+    const toolOnly = await revisionWith([], askOnce.id)
+    await expect(controller.run(toolOnly.id, 'real')).rejects.toThrow(/does not support real mode/)
     expect(controller.phase).toBe('idle')
     expect(await store.listRuns()).toEqual([])
   })
@@ -207,5 +211,53 @@ describe('draft concurrency', () => {
     composition.instances[0]!.stageId = 'missing@stage'
     const draft = await store.saveDraft({ id: 'd', parentRevisionId: null, composition, scenarioId: 'prompt-section-lifecycle', seed: 1 }, null)
     await expect(commitDraft(store, catalog, draft)).rejects.toBeInstanceOf(ControlError)
+  })
+})
+
+describe('real mode through a subprocess (P2-06)', () => {
+  it('swaps in the real adapter, records it in the manifest and keeps the key out of the store', async () => {
+    const { createServer } = await import('node:http')
+    const key = 'sk-subprocess-secret-1234'
+    const seen: string[] = []
+    const server = createServer((request, response) => {
+      seen.push(String(request.headers['x-api-key']))
+      request.resume()
+      request.on('end', () => {
+        response.writeHead(200, { 'content-type': 'text/event-stream' })
+        const events = [
+          { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+          { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: '你好' } },
+          { type: 'content_block_stop', index: 0 },
+          { type: 'message_stop' },
+        ]
+        response.end(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''))
+      })
+    })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    try {
+      const baseUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+      const controller = new RunController({ store, catalog, env: { ...process.env, DEEPSEEK_API_KEY: key, DEEPSEEK_BASE_URL: baseUrl } })
+      const revision = await revisionWith()
+      const runId = await controller.run(revision.id, 'real')
+      await controller.whenSettled(runId)
+      const manifest = await store.getManifest(runId)
+      expect(manifest).toMatchObject({ outcome: 'completed', adapterMode: 'real' })
+      expect(Object.keys(manifest.loadedSourceHashes)).toContain('llm-deepseek@main')
+      expect(Object.keys(manifest.loadedSourceHashes)).not.toContain('llm-scripted@main')
+      expect(seen).toEqual(Array(4).fill(key))
+      const environment = await store.getEnvironment(runId)
+      expect(environment).toMatchObject({ modelProvider: 'deepseek', variables: expect.arrayContaining([{ name: 'DEEPSEEK_API_KEY', present: true, sensitive: true }]) })
+      const files: string[] = []
+      const walk = async (dir: string): Promise<void> => {
+        for (const entry of await readdir(dir, { withFileTypes: true })) {
+          if (entry.isDirectory()) await walk(join(dir, entry.name))
+          else files.push(await readFile(join(dir, entry.name), 'utf8'))
+        }
+      }
+      await walk(root)
+      expect(files.join('\n')).not.toContain(key)
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()))
+    }
   })
 })

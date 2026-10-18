@@ -46,6 +46,9 @@ export function Workbench() {
           draft={draft}
           runtime={state.runtime}
           connected={state.connected}
+          adapterMode={state.adapterMode}
+          environment={state.environment}
+          onAdapterMode={state.setAdapterMode}
           onScenario={scenarioId => state.editDraft(current => ({ ...current, scenarioId }))}
           onRun={() => void state.run()}
           onCancel={() => void state.cancel()}

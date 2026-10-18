@@ -118,6 +118,19 @@ describe('SEC-02: access control', () => {
     expect((await raw('/api/runs', { method: 'POST', body, headers: { cookie } })).status).toBe(403)
   })
 
+  it('reports environment presence without values', async () => {
+    const previous = process.env.DEEPSEEK_API_KEY
+    process.env.DEEPSEEK_API_KEY = 'sk-never-sent-to-browser'
+    try {
+      const response = await authed('/api/environment')
+      expect(response.body).not.toContain('sk-never-sent-to-browser')
+      expect(JSON.parse(response.body).real.variables).toContainEqual({ name: 'DEEPSEEK_API_KEY', present: true, sensitive: true })
+    } finally {
+      if (previous === undefined) delete process.env.DEEPSEEK_API_KEY
+      else process.env.DEEPSEEK_API_KEY = previous
+    }
+  })
+
   it('does not expose stage module paths', async () => {
     const response = await authed('/api/catalog')
     expect(response.status).toBe(200)

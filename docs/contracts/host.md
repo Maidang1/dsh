@@ -33,9 +33,15 @@
 ### SEC-01 密钥与本机信息
 
 - 期望：运行仓库、SSE 与导出不含环境变量值、凭据和绝对路径。
-- 验证：`controller.spec.ts`（运行仓库）、`server.spec.ts`（catalog 不含模块路径）。导出尚未实现。状态：partial。
+- 验证：`controller.spec.ts`（运行仓库，含 real 模式子进程）、`server.spec.ts`（catalog 不含模块路径，`/api/environment` 只含存在标记）、`teaching-runtime/tests/real-adapter.spec.ts`（HTTP 错误与轨迹不含密钥）。导出尚未实现。状态：partial。
 
 ### SEC-02 本地服务访问控制
 
 - 期望：无会话、Host 不符、跨源或无 Origin 的写请求被拒绝；启动令牌只能使用一次。
 - 验证：`server.spec.ts`。状态：verified。
+
+### REAL-01 真实模型适配器
+
+- 上游：`packages/llm/llm-deepseek/src/adapter.ts`、`messages-api.ts`，`packages/llm/llm-deepseek-api-key/src/index.ts`。
+- 期望：real 模式把确定性适配器替换为 `llm-deepseek`（保留实例 id）；请求发往 `{base}/v1/messages`，带 `x-api-key` 与 `anthropic-version`；流式 text_delta 与 input_json_delta 正确组装；工具结果以 tool_result 回传；HTTP 错误与未结束的流使运行失败；缺少密钥时适配器 failed 并给出原因。真实输出不做逐字比较。
+- 验证：`packages/teaching-runtime/tests/real-adapter.spec.ts`、`apps/local-server/tests/controller.spec.ts`「real mode through a subprocess」，均对本地模拟服务。状态：verified（未对真实 DeepSeek 服务验证）。

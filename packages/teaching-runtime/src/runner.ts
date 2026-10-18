@@ -48,6 +48,23 @@ export interface RunResult {
 
 /** Plugin definition whose config receives the scenario's model script. */
 export const SCRIPTED_ADAPTER_DEFINITION = 'llm-scripted'
+/** Real-mode replacement for the scripted adapter. */
+export const REAL_ADAPTER_STAGE = { definitionId: 'llm-deepseek', stageId: 'llm-deepseek@main' } as const
+
+/**
+ * The composition a run actually executes. In real mode every scripted
+ * adapter instance becomes the real adapter, keeping its id, scope and place;
+ * the run manifest records the swap through adapterMode and loaded stages.
+ */
+export function compositionForMode(composition: Composition, mode: AdapterMode): Composition {
+  if (mode === 'deterministic') return composition
+  return {
+    ...composition,
+    instances: composition.instances.map(instance => instance.definitionId === SCRIPTED_ADAPTER_DEFINITION
+      ? { ...instance, ...REAL_ADAPTER_STAGE, config: {} }
+      : instance),
+  }
+}
 
 export class CompositionError extends Error {
   override name = 'CompositionError'
@@ -102,7 +119,8 @@ const settle = async () => {
 }
 
 export async function runScenario(input: RunInput): Promise<RunResult> {
-  const { composition, scenario, stages } = input
+  const { scenario, stages } = input
+  const composition = compositionForMode(input.composition, input.adapterMode)
   validateComposition(composition, scenario, stages)
 
   // Deterministic virtual clock: one tick per record, independent of wall time.

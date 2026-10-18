@@ -26,6 +26,7 @@ export const devStages: readonly ExecutableStageDefinition[] = [
   stage('tools', 'main', ['systemPrompt'], ['tools']),
   stage('llm', 'main', [], ['llm']),
   stage('llm-scripted', 'main', ['llm'], []),
+  stage('llm-deepseek', 'main', ['llm'], []),
   stage('agent-loop', 'main', ['sessions', 'llm', 'tools', 'systemPrompt'], ['agentLoop']),
   stage('prompt-contributor', '00-entry', [], []),
   stage('prompt-contributor', '01-dependency', ['systemPrompt'], []),

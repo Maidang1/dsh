@@ -19,7 +19,7 @@ import type {
   RuntimeState,
   TraceRecord,
 } from '@harness-explorer/contracts'
-import { validateComposition } from '@harness-explorer/teaching-runtime'
+import { compositionForMode, validateComposition } from '@harness-explorer/teaching-runtime'
 import { emptySnapshot, reduceTrace } from '@harness-explorer/trace'
 import type { ViewSnapshot } from '@harness-explorer/trace'
 import { createActor, setup } from 'xstate'
@@ -222,12 +222,12 @@ export class RunController {
     if (adapterMode === 'real') {
       const env = this.options.env ?? process.env
       const missing = RUN_VARIABLES.real.filter(variable => variable.sensitive && !env[variable.name]).map(variable => variable.name)
-      if (missing.length) throw new ControlError('invalid', `real mode needs ${missing.join(', ')}`)
-      throw new ControlError('invalid', 'the real model adapter is not available in this version yet')
+      if (missing.length) throw new ControlError('invalid', `real mode needs ${missing.join(', ')} in the environment that started pnpm explorer`)
     }
-    const used = new Set(revision.composition.instances.map(instance => instance.stageId))
+    const executed = compositionForMode(revision.composition, adapterMode)
+    const used = new Set(executed.instances.map(instance => instance.stageId))
     const stages = catalog.stages.filter(stage => used.has(stage.id))
-    validateComposition(revision.composition, scenario, catalog.stages)
+    validateComposition(executed, scenario, catalog.stages)
     return {
       type: 'START',
       runId: `run-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${randomUUID().slice(0, 8)}`,

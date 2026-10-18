@@ -13,6 +13,7 @@ import { z, ZodError } from 'zod'
 import type { Catalog } from './catalog.ts'
 import { ControlError } from './controller.ts'
 import type { ControllerEvent, RunController } from './controller.ts'
+import { captureEnvironment } from './environment.ts'
 import { commitDraft } from './experiments.ts'
 import { ConflictError, Draft, NotFoundError } from './store.ts'
 import type { RunStore } from './store.ts'
@@ -23,6 +24,8 @@ export interface ServerOptions {
   controller: RunController
   port?: number
   staticDir?: string
+  /** Environment the runs see; defaults to process.env. */
+  env?: NodeJS.ProcessEnv
   /** Fixed launch token for automated browser tests; random when omitted. */
   launchToken?: string
 }
@@ -209,6 +212,9 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
           stages: lessons.stages.map(({ modulePath: _modulePath, definition: { module: _module, ...definition }, ...stage }) => ({ ...stage, definition })),
         })
       }
+      case 'GET /environment':
+        // Presence flags only; values never leave Node.
+        return sendJson(response, 200, { real: captureEnvironment('real', options.env), deterministic: captureEnvironment('deterministic', options.env) })
       case 'GET /compositions':
         return sendJson(response, 200, catalog.compositions)
       case 'GET /state':

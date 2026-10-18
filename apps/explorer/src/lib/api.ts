@@ -69,6 +69,7 @@ export const api = {
   lessons: () => request<LessonsResponse>('/api/lessons'),
   compositions: () => request<Record<string, Composition>>('/api/compositions'),
   state: () => request<RuntimeState>('/api/state'),
+  environment: () => request<Record<AdapterMode, EnvironmentSnapshot>>('/api/environment'),
   runs: () => request<RunManifest[]>('/api/runs'),
   run: (runId: string) => request<{ manifest: RunManifest; environment: EnvironmentSnapshot }>(`/api/runs/${encodeURIComponent(runId)}`),
   trace: (runId: string) => request<TracePage>(`/api/runs/${encodeURIComponent(runId)}/trace`),

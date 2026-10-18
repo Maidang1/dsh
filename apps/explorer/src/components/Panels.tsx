@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
-import type { PluginInstance, RuntimeState } from '@harness-explorer/contracts'
+import type { AdapterMode, EnvironmentSnapshot, PluginInstance, RuntimeState } from '@harness-explorer/contracts'
 import type { ViewSnapshot } from '@harness-explorer/trace/browser'
 import type { Draft, LessonsResponse, PublicCatalog, PublicStage } from '@/lib/api'
 import type { RunData } from '@/lib/store'
@@ -34,13 +34,19 @@ interface RunBarProps {
   draft: Draft
   runtime: RuntimeState | null
   connected: boolean
+  adapterMode: AdapterMode
+  environment: Record<AdapterMode, EnvironmentSnapshot> | null
+  onAdapterMode(mode: AdapterMode): void
   onScenario(id: string): void
   onRun(): void
   onCancel(): void
 }
 
-export function RunBar({ catalog, draft, runtime, connected, onScenario, onRun, onCancel }: RunBarProps) {
+export function RunBar({ catalog, draft, runtime, connected, adapterMode, environment, onAdapterMode, onScenario, onRun, onCancel }: RunBarProps) {
   const busy = runtime !== null && runtime.phase !== 'idle'
+  const missing = environment?.real.variables.filter(variable => variable.sensitive && !variable.present).map(variable => variable.name) ?? ['DEEPSEEK_API_KEY']
+  const scenario = catalog.scenarios.find(item => item.id === draft.scenarioId)
+  const realAllowed = missing.length === 0 && scenario?.adapterModes.includes('real')
   return (
     <div className="run-bar" role="toolbar" aria-label="运行控制">
       <label>
@@ -52,7 +58,16 @@ export function RunBar({ catalog, draft, runtime, connected, onScenario, onRun, 
       <button type="button" className="primary" onClick={onRun} disabled={busy} title={busy ? '当前运行结束后才能再次运行' : undefined}>
         运行教学代码
       </button>
-      <span className="badge">确定性模型 · 无需 API Key</span>
+      <label>
+        模型
+        <select value={adapterMode} onChange={event => onAdapterMode(event.target.value as AdapterMode)}>
+          <option value="deterministic">确定性模型（无需 API Key）</option>
+          <option value="real" disabled={!realAllowed}>
+            真实模型 DeepSeek{missing.length ? `（需在启动环境设置 ${missing.join('、')}）` : scenario?.adapterModes.includes('real') ? '' : '（当前场景不支持）'}
+          </option>
+        </select>
+      </label>
+      <span className="badge">{adapterMode === 'real' ? '真实模型 · 结果不可严格复现 · 环境来自本机' : '确定性模型 · 可重复'}</span>
       {busy ? <button type="button" onClick={onCancel}>停止运行</button> : null}
       <span className="run-bar__phase" aria-live="polite">
         控制器：{PHASE_TEXT[runtime?.phase ?? 'idle']}

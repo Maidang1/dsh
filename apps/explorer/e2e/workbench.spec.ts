@@ -58,6 +58,12 @@ test('keeps the run after a reload and offers a text list of the tree', async ()
   await expect(page.getByRole('complementary', { name: '实例摘要' })).toContainText('提供systemPrompt')
 })
 
+test('offers the real model only when the key is configured', async () => {
+  const real = page.getByLabel('模型').locator('option[value="real"]')
+  await expect(real).toHaveJSProperty('disabled', true)
+  await expect(real).toContainText('DEEPSEEK_API_KEY')
+})
+
 test('rejects visitors without the launch token', async ({ browser }) => {
   const context = await browser.newContext({ storageState: undefined })
   const response = await (await context.newPage()).goto('/api/state')

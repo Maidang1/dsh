@@ -6,7 +6,9 @@
  */
 import { create } from 'zustand'
 import type {
+  AdapterMode,
   Composition,
+  EnvironmentSnapshot,
   ExperimentRevision,
   JsonValue,
   PluginInstance,
@@ -50,6 +52,8 @@ interface ExplorerState {
   selectedInstanceId: string | null
   layer: Layer
   listView: boolean
+  adapterMode: AdapterMode
+  environment: Record<AdapterMode, EnvironmentSnapshot> | null
 
   init(): Promise<void>
   selectRun(runId: string | null): Promise<void>
@@ -58,6 +62,7 @@ interface ExplorerState {
   selectInstance(id: string | null): void
   setLayer(layer: Layer): void
   setListView(listView: boolean): void
+  setAdapterMode(mode: AdapterMode): void
   editDraft(edit: (draft: Draft) => Omit<Draft, 'version'>): Promise<void>
   run(): Promise<void>
   /**
@@ -159,11 +164,14 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     selectedInstanceId: null,
     layer: 'composition',
     listView: false,
+    adapterMode: 'deterministic',
+    environment: null,
 
     async init() {
       try {
         const [catalog, compositions, runtime, runs] = await Promise.all([api.catalog(), api.compositions(), api.state(), api.runs()])
         const lessons = await api.lessons().catch(() => null)
+        const environment = await api.environment().catch(() => null)
         let draft: Draft
         try {
           draft = await api.draft(DRAFT_ID)
@@ -178,7 +186,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
             seed: 1,
           }, null)
         }
-        set({ ready: true, catalog, compositions, runtime, runs, draft, lessons })
+        set({ ready: true, catalog, compositions, runtime, runs, draft, lessons, environment })
         const latest = runtime.runId ?? runs[0]?.runId ?? null
         if (latest) await get().selectRun(latest)
       } catch (error) {
@@ -205,6 +213,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     selectInstance: selectedInstanceId => set({ selectedInstanceId }),
     setLayer: layer => set({ layer }),
     setListView: listView => set({ listView }),
+    setAdapterMode: adapterMode => set({ adapterMode }),
     dismissError: () => set({ error: null }),
 
     async editDraft(edit) {
@@ -225,7 +234,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     async run() {
       try {
         const revision = await api.commitDraft(DRAFT_ID)
-        const { runId } = await api.startRun(revision.id, 'deterministic')
+        const { runId } = await api.startRun(revision.id, get().adapterMode)
         set(state => ({ selectedRunId: runId, cursor: null, runData: { ...state.runData } }))
         await loadRun(runId, true)
         set({ runs: await api.runs() })
