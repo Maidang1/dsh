@@ -21,8 +21,12 @@ test.beforeEach(async ({ request }) => {
   runsBefore = (await request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
 })
 test.afterEach(async ({ request, baseURL }) => {
+  // The server refuses deletes until the controller is idle again (STORE-01), which can trail the UI's result.
+  await expect.poll(async () => (await request.get('/api/state').then(response => response.json()) as { phase: string }).phase).toBe('idle')
   for (const run of await request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
-    if (!runsBefore.includes(run.runId)) await request.delete(`/api/runs/${run.runId}`, { headers: { origin: baseURL! } })
+    if (runsBefore.includes(run.runId)) continue
+    const deleted = await request.delete(`/api/runs/${run.runId}`, { headers: { origin: baseURL! } })
+    expect(deleted.ok(), await deleted.text()).toBe(true)
   }
   if (!original) return
   const { version: _version, ...draft } = original

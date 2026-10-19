@@ -4,7 +4,7 @@
  * so tests that only look at the page would miss it.
  */
 import { expect, test } from '@playwright/test'
-import type { Page } from '@playwright/test'
+import type { APIRequestContext, Page } from '@playwright/test'
 
 /** A draft (the workbench's, or a lesson's) that does not exist yet answers 404; the page then creates it. */
 const EXPECTED = [/\/api\/drafts\/[^/]+$/]
@@ -29,6 +29,16 @@ function watch(page: Page) {
   return () => [...problems, ...failedLoads > failedResponses ? [`${failedLoads - failedResponses} failed load(s) with no matching response`] : []]
 }
 
+/** Delete the runs created since `before`, once the controller is idle (the server refuses deletes before that). */
+async function deleteRunsSince(request: APIRequestContext, baseURL: string, before: readonly string[]) {
+  await expect.poll(async () => (await request.get('/api/state').then(response => response.json()) as { phase: string }).phase).toBe('idle')
+  for (const run of await request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
+    if (before.includes(run.runId)) continue
+    const deleted = await request.delete(`/api/runs/${run.runId}`, { headers: { origin: baseURL } })
+    expect(deleted.ok(), await deleted.text()).toBe(true)
+  }
+}
+
 test('workbench, a run and its comparison tabs', async ({ page, request, baseURL }) => {
   const problems = watch(page)
   const runsBefore = (await request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
@@ -42,9 +52,7 @@ test('workbench, a run and its comparison tabs', async ({ page, request, baseURL
   await page.locator('.react-flow__node[data-id="agent-loop"]').click()
   await page.getByRole('button', { name: '添加插件' }).click()
   expect(problems()).toEqual([])
-  for (const run of await request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
-    if (!runsBefore.includes(run.runId)) await request.delete(`/api/runs/${run.runId}`, { headers: { origin: baseURL! } })
-  }
+  await deleteRunsSince(request, baseURL!, runsBefore)
 })
 
 test('every lesson and its side panels', async ({ page, request }) => {
@@ -86,13 +94,14 @@ test('lesson stage runs, run comparison, presets, scopes and the narrow layout',
   await page.getByRole('tablist', { name: '主区域' }).getByRole('tab', { name: '插件树' }).click()
   expect(problems()).toEqual([])
 
+  // Close the page first so no save of its own lands between reading the version and restoring.
+  await page.close()
   if (original) {
     const { version: _version, ...draft } = original
     const { version } = await request.get('/api/drafts/main').then(response => response.json()) as { version: number }
-    await request.put('/api/drafts/main', { data: { expectedVersion: version, draft }, headers: { origin: baseURL! } })
+    const restored = await request.put('/api/drafts/main', { data: { expectedVersion: version, draft }, headers: { origin: baseURL! } })
+    expect(restored.ok(), await restored.text()).toBe(true)
   }
   await request.put('/api/lessons/tool-guard/progress', { data: { lastStageId: '00-observe' }, headers: { origin: baseURL! } })
-  for (const run of await request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
-    if (!runsBefore.includes(run.runId)) await request.delete(`/api/runs/${run.runId}`, { headers: { origin: baseURL! } })
-  }
+  await deleteRunsSince(request, baseURL!, runsBefore)
 })
