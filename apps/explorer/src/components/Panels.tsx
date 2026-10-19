@@ -10,7 +10,7 @@ import type { Draft, LessonsResponse, PublicCatalog, PublicStage } from '@/lib/a
 import type { RunData } from '@/lib/store'
 import { PHASE_LABEL, phaseOf } from './PluginTree'
 import type { PhaseChange } from '@/lib/replay'
-import { latestStages, parseConfig, planAddition, scopeIdProblem } from '@/lib/library'
+import { latestStages, parseConfig, planAddition, scopeIdProblem, scopeRemovalProblem } from '@/lib/library'
 import type { AffectedConsumer } from '@/lib/library'
 
 const PHASE_TEXT: Record<RuntimeState['phase'], string> = {
@@ -293,7 +293,12 @@ function ConfigEditor({ config, configKeys, onApply }: { config: JsonValue; conf
 }
 
 /** Scopes of the draft and a form to add one; instances choose their scope in the inspector. */
-export function ScopeEditor({ scopes, onCreate }: { scopes: readonly ScopeDefinition[]; onCreate(id: string, parentId: string): Promise<boolean> }) {
+export function ScopeEditor({ composition, onCreate, onRemove }: {
+  composition: { scopes: readonly ScopeDefinition[]; instances: readonly PluginInstance[] }
+  onCreate(id: string, parentId: string): Promise<boolean>
+  onRemove(id: string): void
+}) {
+  const scopes = composition.scopes
   const [id, setId] = useState('')
   const [parentId, setParentId] = useState(ROOT_SCOPE)
   const [saving, setSaving] = useState(false)
@@ -303,7 +308,19 @@ export function ScopeEditor({ scopes, onCreate }: { scopes: readonly ScopeDefini
   return (
     <details className="scope-editor">
       <summary>作用域（{scopes.length}）</summary>
-      <ul>{scopes.map(scope => <li key={scope.id}>{scope.id}{scope.parentId ? <span className="muted">（父：{scope.parentId}）</span> : <span className="muted">（根）</span>}</li>)}</ul>
+      <ul>
+        {scopes.map((scope) => {
+          const problem = scopeRemovalProblem(scope.id, composition)
+          return (
+            <li key={scope.id}>
+              {scope.id}{scope.parentId ? <span className="muted">（父：{scope.parentId}）</span> : <span className="muted">（根）</span>}
+              {scope.id === ROOT_SCOPE ? null : problem
+                ? <span className="muted"> · 不能删除：{problem}</span>
+                : <> <button type="button" className="link-button" onClick={() => onRemove(scope.id)}>删除</button></>}
+            </li>
+          )
+        })}
+      </ul>
       <p className="muted">作用域只决定提示词片段的分层：会话按 agent-loop 配置中的 sessionScopes 选择作用域链；服务在整个组合中解析。</p>
       <label>
         新作用域

@@ -3,7 +3,7 @@ import { Composition } from '@harness-explorer/contracts'
 import { devStages } from '@harness-explorer/teaching-plugins'
 import { describe, expect, it } from 'vitest'
 import minimalChat from '../../../fixtures/compositions/minimal-chat.json' with { type: 'json' }
-import { affectedConsumers, instancesFor, parseConfig, planAddition, scopeIdProblem } from '../src/lib/library'
+import { affectedConsumers, instancesFor, parseConfig, planAddition, scopeIdProblem, scopeRemovalProblem } from '../src/lib/library'
 import type { PublicStage } from '../src/lib/api'
 
 const stages: PublicStage[] = devStages.map(({ module: _module, ...stage }) => stage)
@@ -73,5 +73,16 @@ describe('plugin library', () => {
     expect(parseConfig('{', undefined)).toMatchObject({ problem: expect.stringContaining('不是合法的 JSON') })
     // Development stages carry no keys; the runner checks them instead.
     expect(parseConfig('{"anything": true}', undefined)).toEqual({ config: { anything: true } })
+  })
+
+  it('removes only a scope nothing uses', () => {
+    const scopes = [...composition.scopes, { id: 'a', parentId: 'root' }, { id: 'b', parentId: 'a' }]
+    const loop = composition.instances.map(instance => (instance.id === 'agent-loop' ? { ...instance, config: { sessionScopes: { 's-b': ['root', 'b'] } } } : instance))
+    expect(scopeRemovalProblem('root', { scopes, instances: composition.instances })).toBe('根作用域不能删除')
+    expect(scopeRemovalProblem('a', { scopes, instances: composition.instances })).toBe('仍有子作用域：b')
+    expect(scopeRemovalProblem('b', { scopes, instances: loop })).toBe('仍被 sessionScopes 使用：agent-loop 的会话 s-b')
+    const moved = composition.instances.map(instance => (instance.id === 'prompt-contributor' ? { ...instance, scopeId: 'b' } : instance))
+    expect(scopeRemovalProblem('b', { scopes, instances: moved })).toBe('仍有实例：prompt-contributor')
+    expect(scopeRemovalProblem('b', { scopes, instances: composition.instances })).toBeNull()
   })
 })

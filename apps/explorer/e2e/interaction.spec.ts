@@ -282,6 +282,11 @@ test('a section in a nested scope reaches only the sessions mapped to that scope
   await page.getByLabel('新作用域').fill('agent-b')
   await page.getByRole('button', { name: '新建作用域' }).click()
   await expect(page.locator('.scope-editor summary')).toHaveText('作用域（2）')
+  // A scope nothing uses can be removed; once used, the editor says why it cannot.
+  await page.getByLabel('新作用域').fill('spare')
+  await page.getByRole('button', { name: '新建作用域' }).click()
+  await page.locator('.scope-editor li', { hasText: 'spare' }).getByRole('button', { name: '删除' }).click()
+  await expect(page.locator('.scope-editor summary')).toHaveText('作用域（2）')
 
   await node('prompt-contributor').click()
   await page.getByRole('complementary', { name: '实例摘要' }).getByLabel('作用域').selectOption('agent-b')
@@ -294,6 +299,7 @@ test('a section in a nested scope reaches only the sessions mapped to that scope
   await config.fill('{"sessionScopes": {"s-b": ["root", "agent-b"]}}')
   await page.getByRole('button', { name: '应用配置' }).click()
   await expect(config).toHaveValue(/"s-b"/)
+  await expect(page.locator('.scope-editor li', { hasText: 'agent-b' })).toContainText('不能删除：仍有实例：prompt-contributor')
 
   await page.getByRole('button', { name: '运行教学代码' }).click()
   await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })

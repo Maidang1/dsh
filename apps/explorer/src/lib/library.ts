@@ -111,3 +111,23 @@ export function parseConfig(text: string, configKeys: readonly string[] | undefi
   if (unsupported.length) return { problem: `不支持的配置项：${unsupported.join('、')}（支持：${configKeys!.join('、') || '无'}）` }
   return { config: value }
 }
+
+/**
+ * Why `scopeId` cannot be removed from the composition, or null when nothing uses it.
+ * Removing a scope in use would silently move instances or sessions to other layers.
+ */
+export function scopeRemovalProblem(scopeId: string, composition: { scopes: readonly ScopeDefinition[]; instances: readonly PluginInstance[] }): string | null {
+  if (scopeId === ROOT_SCOPE) return '根作用域不能删除'
+  const instances = composition.instances.filter(instance => instance.scopeId === scopeId).map(instance => instance.id)
+  if (instances.length) return `仍有实例：${instances.join('、')}`
+  const children = composition.scopes.filter(scope => scope.parentId === scopeId).map(scope => scope.id)
+  if (children.length) return `仍有子作用域：${children.join('、')}`
+  const sessions = composition.instances.flatMap(instance => {
+    const scopes = (instance.config as { sessionScopes?: Record<string, unknown> } | null)?.sessionScopes
+    return scopes && typeof scopes === 'object'
+      ? Object.entries(scopes).filter(([, chain]) => Array.isArray(chain) && chain.includes(scopeId)).map(([session]) => `${instance.id} 的会话 ${session}`)
+      : []
+  })
+  if (sessions.length) return `仍被 sessionScopes 使用：${sessions.join('、')}`
+  return null
+}

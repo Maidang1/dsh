@@ -153,7 +153,11 @@ export function Workbench() {
           onAdd={(selected, scopeId) => void updateInstances(instances => [...instances, ...instancesFor(selected, instances, scopeId)])}
         />
         <ScopeEditor
-          scopes={draft.composition.scopes}
+          composition={draft.composition}
+          onRemove={id => void state.editDraft(current => ({
+            ...current,
+            composition: { ...current.composition, scopes: current.composition.scopes.filter(scope => scope.id !== id) },
+          }))}
           onCreate={async (id, parentId) => {
             await state.editDraft(current => ({
               ...current,
