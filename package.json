@@ -21,6 +21,7 @@
     "lesson:new": "tsx scripts/new-lesson.ts"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@harness-explorer/contracts": "workspace:*",
     "@harness-explorer/lesson-kit": "workspace:*",
     "@harness-explorer/teaching-plugins": "workspace:*",
