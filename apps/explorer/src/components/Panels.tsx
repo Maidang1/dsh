@@ -298,7 +298,7 @@ export function PluginLibrary({ stages, responsibilities, draft, onAdd }: Librar
                 </div>
                 {missing.length ? (
                   <div className="warning-text">
-                    根作用域缺少：{missing.join('、')}（只添加此插件时，实例会停在等待状态）
+                    组合中缺少：{missing.join('、')}（只添加此插件时，实例会停在等待状态）
                     {plan.providers.length ? <div>可同时添加：{plan.providers.map(item => `${item.stage.pluginDefinitionId}（提供 ${item.service}）`).join('、')}</div> : null}
                     {plan.unresolved.length ? <div>插件库中没有提供 {plan.unresolved.join('、')} 的插件</div> : null}
                   </div>

@@ -90,7 +90,7 @@ test('adds a plugin together with the providers of its missing services', async 
 
   await page.getByRole('button', { name: '添加插件' }).click()
   const entry = page.locator('.library__list li').filter({ hasText: 'calculator' })
-  await expect(entry).toContainText('根作用域缺少：tools')
+  await expect(entry).toContainText('组合中缺少：tools')
   await expect(entry).toContainText('可同时添加：tools（提供 tools）')
   await entry.getByRole('button', { name: '同时添加依赖（共 2 个实例）' }).click()
   await expect(node('tools')).toBeVisible()

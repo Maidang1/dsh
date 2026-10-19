@@ -23,8 +23,9 @@ export function latestStages(stages: readonly PublicStage[]): PublicStage[] {
 }
 
 /**
- * Resolve the services `stage` requires that the root scope does not provide
- * yet, transitively. Each missing service takes the first definition whose
+ * Resolve the services `stage` requires that the composition does not provide
+ * yet, transitively. Services resolve from the root context for every
+ * instance; scopes only layer prompt sections, so they play no part here. Each missing service takes the first definition whose
  * latest stage provides it; adapters that provide nothing are never picked.
  */
 export function planAddition(stages: readonly PublicStage[], instances: readonly PluginInstance[], stage: PublicStage): AdditionPlan {
