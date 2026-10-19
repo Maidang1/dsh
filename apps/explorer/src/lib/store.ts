@@ -228,7 +228,9 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         // Moving between the workbench and a lesson keeps the selected run (docs/01 §3.2);
         // a fresh page starts from the current or latest run.
         const kept = get().selectedRunId
-        const latest = (kept && runs.some(run => run.runId === kept) ? kept : null) ?? runtime.runId ?? runs[0]?.runId ?? null
+        // The controller keeps the id of its last run after it settles, even if that run was deleted since.
+        const current = runtime.runId && (runtime.phase !== 'idle' || runs.some(run => run.runId === runtime.runId)) ? runtime.runId : null
+        const latest = (kept && runs.some(run => run.runId === kept) ? kept : null) ?? current ?? runs[0]?.runId ?? null
         if (latest) await get().selectRun(latest)
       } catch (error) {
         set({ error: describeFailure('load', error) })
@@ -261,8 +263,11 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       draftEdits = draftEdits.catch(() => {}).then(async () => {
         const draft = get().draft
         if (!draft) return
+        const next = edit(draft)
+        // An edit that declines to change anything returns the draft itself; no new version for that.
+        if (next === draft) return
         try {
-          const saved = await api.saveDraft(edit(draft), draft.version)
+          const saved = await api.saveDraft(next, draft.version)
           set({ draft: saved })
         } catch (error) {
           if (error instanceof ApiError && error.status === 409) {
