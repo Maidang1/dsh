@@ -21,6 +21,7 @@ export interface PublicCatalog {
   upstreamCommit: string
   stages: PublicStage[]
   responsibilities: Record<string, PluginResponsibility>
+  presetScenarios: Record<string, string>
   scenarios: Scenario[]
 }
 

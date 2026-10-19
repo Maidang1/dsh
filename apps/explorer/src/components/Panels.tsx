@@ -296,7 +296,12 @@ function ConfigEditor({ config, configKeys, onApply }: { config: JsonValue; conf
  * Start the draft over from a preset composition (fixtures/compositions).
  * It replaces the draft's composition, so it asks first; runs keep their own revisions.
  */
-export function PresetPicker({ presets, onLoad }: { presets: Readonly<Record<string, Composition>>; onLoad(id: string): void }) {
+export function PresetPicker({ presets, scenarios, onLoad }: {
+  presets: Readonly<Record<string, Composition>>
+  /** The scenario written for each preset; loading a preset switches to it. */
+  scenarios: Readonly<Record<string, string>>
+  onLoad(id: string, scenarioId: string | undefined): void
+}) {
   const ids = Object.keys(presets)
   const [id, setId] = useState(ids[0] ?? '')
   const [confirming, setConfirming] = useState(false)
@@ -311,8 +316,8 @@ export function PresetPicker({ presets, onLoad }: { presets: Readonly<Record<str
       </label>
       {confirming ? (
         <span>
-          草稿的组合将被 {id} 替换；场景保持不变，历史运行不受影响。
-          <button type="button" className="danger" onClick={() => { onLoad(id); setConfirming(false) }}>确认载入</button>
+          草稿的组合将被 {id} 替换{scenarios[id] ? `，场景切换为 ${scenarios[id]}` : '，场景保持不变'}；历史运行不受影响。
+          <button type="button" className="danger" onClick={() => { onLoad(id, scenarios[id]); setConfirming(false) }}>确认载入</button>
           <button type="button" onClick={() => setConfirming(false)}>取消</button>
         </span>
       ) : <button type="button" onClick={() => setConfirming(true)}>载入预设…</button>}
@@ -327,6 +332,8 @@ export function ScopeEditor({ composition, onCreate, onRemove }: {
   onRemove(id: string): void
 }) {
   const scopes = composition.scopes
+  // One pass per draft change, not per scope on every render.
+  const problems = useMemo(() => new Map(scopes.map(scope => [scope.id, scopeRemovalProblem(scope.id, composition)])), [composition, scopes])
   const [id, setId] = useState('')
   const [parentId, setParentId] = useState(ROOT_SCOPE)
   const [saving, setSaving] = useState(false)
@@ -338,11 +345,11 @@ export function ScopeEditor({ composition, onCreate, onRemove }: {
       <summary>作用域（{scopes.length}）</summary>
       <ul>
         {scopes.map((scope) => {
-          const problem = scopeRemovalProblem(scope.id, composition)
+          const problem = problems.get(scope.id)
           return (
             <li key={scope.id}>
               {scope.id}{scope.parentId ? <span className="muted">（父：{scope.parentId}）</span> : <span className="muted">（根）</span>}
-              {scope.id === ROOT_SCOPE ? null : problem
+              {problem
                 ? <span className="muted"> · 不能删除：{problem}</span>
                 : <> <button type="button" className="link-button" onClick={() => onRemove(scope.id)}>删除</button></>}
             </li>

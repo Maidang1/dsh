@@ -11,6 +11,8 @@ const fixture = (path: string) => JSON.parse(readFileSync(new URL(`../../../fixt
 export const minimalChat = (): Composition => Composition.parse(fixture('compositions/minimal-chat.json'))
 export const greetingScript = (): ModelScript => ModelScript.parse(fixture('model-scripts/greeting.json'))
 export const lifecycleScenario = (): Scenario => Scenario.parse(fixture('scenarios/prompt-section-lifecycle.json'))
+export const scopedChat = (): Composition => Composition.parse(fixture('compositions/scoped-chat.json'))
+export const promptScopeScenario = (): Scenario => Scenario.parse(fixture('scenarios/prompt-scope.json'))
 
 export function scenario(steps: ScenarioStep[], modelScriptId = 'greeting'): Scenario {
   return Scenario.parse({ id: 'inline', title: 'inline', steps, modelScriptId, memoryFiles: {}, adapterModes: ['deterministic'] })

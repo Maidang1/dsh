@@ -8,7 +8,7 @@ import { PluginList, PluginTree } from './PluginTree'
 import { Inspector, PluginLibrary, PresetPicker, ReplayPosition, RunBar, ScopeEditor, Timeline, outcomeText } from './Panels'
 import { RequestDiff } from './RequestDiff'
 import { NarrowTabs, narrowPane } from './NarrowTabs'
-import { affectedConsumers, instancesFor, planAddition } from '@/lib/library'
+import { affectedConsumers, instancesFor, planAddition, scopeRemovalProblem } from '@/lib/library'
 
 type BottomTab = 'timeline' | 'diff'
 
@@ -154,11 +154,23 @@ export function Workbench() {
         />
         <PresetPicker
           presets={state.compositions}
-          onLoad={id => void state.editDraft(current => ({ ...current, parentRevisionId: null, composition: structuredClone(state.compositions[id]!) }))}
+          scenarios={catalog.presetScenarios}
+          onLoad={async (id, scenarioId) => {
+            await state.editDraft(current => ({
+              ...current,
+              parentRevisionId: null,
+              composition: structuredClone(state.compositions[id]!),
+              ...scenarioId ? { scenarioId } : {},
+            }))
+            // Show the draft that was just replaced, not a run of the old composition.
+            state.selectInstance(null)
+            await state.selectRun(null)
+          }}
         />
         <ScopeEditor
           composition={draft.composition}
-          onRemove={id => void state.editDraft(current => ({
+          // Checked again on the draft the edit applies to: an earlier queued edit may have started using the scope.
+          onRemove={id => void state.editDraft(current => (scopeRemovalProblem(id, current.composition) ? current : {
             ...current,
             composition: { ...current.composition, scopes: current.composition.scopes.filter(scope => scope.id !== id) },
           }))}

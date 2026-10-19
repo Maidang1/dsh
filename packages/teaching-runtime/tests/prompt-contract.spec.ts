@@ -2,15 +2,14 @@
  * PROMPT-01..04 contracts (docs/05-validation-and-release.md §3, §4.0), run on
  * the teaching runtime over real Cordis 4.0.5.
  */
-import { Composition, Scenario, TraceName } from '@harness-explorer/contracts'
-import { readFileSync } from 'node:fs'
+import { TraceName } from '@harness-explorer/contracts'
 import type { PluginPhasePayload, RegistrationAddPayload } from '@harness-explorer/contracts'
 import { Context } from '@deepseek-ai/cordis'
 import type { Plugin } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import SystemPrompt from '../../teaching-plugins/system-prompt/stages/main/index.ts'
 import { toPluginPhase } from '../src/fiber-phase.ts'
-import { finalView, lifecycleScenario, minimalChat, payloadOf, recordsOf, requestsOf, run, scenario } from './helpers.ts'
+import { finalView, lifecycleScenario, minimalChat, payloadOf, promptScopeScenario, recordsOf, requestsOf, run, scenario, scopedChat } from './helpers.ts'
 
 const SECTION_TEXT = '回答时使用短句'
 const occurrences = (text: string, part: string) => text.split(part).length - 1
@@ -167,8 +166,7 @@ describe('section order validity (docs/03 §7)', () => {
 
 describe('PROMPT-03 preset: fixtures/compositions/scoped-chat.json with the prompt-scope scenario', () => {
   it('gives the root session the outer section and the agent-b session the nested one', async () => {
-    const fixture = (path: string) => JSON.parse(readFileSync(new URL(`../../../fixtures/${path}`, import.meta.url), 'utf8'))
-    const result = await run({ composition: Composition.parse(fixture('compositions/scoped-chat.json')), scenario: Scenario.parse(fixture('scenarios/prompt-scope.json')) })
+    const result = await run({ composition: scopedChat(), scenario: promptScopeScenario() })
     expect(result.error).toBeNull()
     expect(requestsOf(result, 'root-session')[0]!.system).toBe(`你是一个助手\n\n${SECTION_TEXT}`)
     expect(requestsOf(result, 'scoped-session')[0]!.system).toBe('你是一个助手\n\n回答时使用英文')

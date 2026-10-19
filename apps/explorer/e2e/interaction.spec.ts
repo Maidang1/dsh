@@ -11,12 +11,19 @@ const FEEDBACK_MS = 100
 
 // Tests here edit the draft; put it back so the other specs see the preset composition.
 // Before the first page load the draft does not exist yet, and the page creates it.
+// Runs a test creates are deleted afterwards, also when it fails: lesson stage runs start from the latest
+// run's composition, and other specs count runs.
 let original: ({ version: number } & Record<string, unknown>) | null
+let runsBefore: string[]
 test.beforeEach(async ({ request }) => {
   const response = await request.get('/api/drafts/main')
   original = response.ok() ? await response.json() : null
+  runsBefore = (await request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
 })
 test.afterEach(async ({ request, baseURL }) => {
+  for (const run of await request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
+    if (!runsBefore.includes(run.runId)) await request.delete(`/api/runs/${run.runId}`, { headers: { origin: baseURL! } })
+  }
   if (!original) return
   const { version: _version, ...draft } = original
   const { version } = await request.get('/api/drafts/main').then(response => response.json()) as { version: number }
@@ -95,7 +102,6 @@ test('adds a plugin together with the providers of its missing services', async 
   await entry.getByRole('button', { name: '同时添加依赖（共 2 个实例）' }).click()
   await expect(node('tools')).toBeVisible()
   await expect(node('calculator')).toBeVisible()
-
 })
 
 test('filters the plugin library by responsibility', async ({ page }) => {
@@ -121,7 +127,6 @@ test('shows a waiting instance as waiting for a service and offers its provider'
   await page.getByRole('button', { name: '确认移除' }).click()
   await expect(node('tools')).toHaveCount(0)
 
-  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
   await page.getByRole('button', { name: '运行教学代码' }).click()
   await expect(page.getByText(/运行结果：/)).toBeVisible({ timeout: 20_000 })
   await expect(node('agent-loop')).toContainText('等待服务')
@@ -132,18 +137,9 @@ test('shows a waiting instance as waiting for a service and offers its provider'
   // The provider goes into the draft; the run keeps the composition it ran.
   await page.getByLabel('查看运行').selectOption('')
   await expect(node('tools')).toBeVisible()
-
-  // Lesson stage runs start from the selected (latest) run's composition; do not leave this one behind.
-  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
-    if (runsBefore.includes(run.runId)) continue
-    const response = await page.request.delete(`/api/runs/${run.runId}`, { headers: { origin: new URL(page.url()).origin } })
-    expect(response.ok()).toBe(true)
-  }
-
 })
 
 test('a trace record leads to its instance and the code of the stage that ran', async ({ page }) => {
-  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
   await page.goto('/')
   await page.getByRole('button', { name: '运行教学代码' }).click()
   await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
@@ -163,14 +159,9 @@ test('a trace record leads to its instance and the code of the stage that ran', 
   // Opening the lesson saved this stage as the reading position; the lesson spec starts from the beginning.
   const origin = { origin: new URL(page.url()).origin }
   await page.request.put('/api/lessons/prompt-contributor/progress', { data: { lastStageId: '00-entry' }, headers: origin })
-
-  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
-    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
-  }
 })
 
 test('a second tab learns about a run started in another tab without reloading', async ({ page, context }) => {
-  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
   const other = await context.newPage()
   await other.goto('/')
   await expect(other.getByRole('button', { name: '运行教学代码' })).toBeEnabled()
@@ -184,15 +175,9 @@ test('a second tab learns about a run started in another tab without reloading',
   // The other tab only watches the runtime state stream; its run list follows.
   await expect(other.getByLabel('查看运行').locator(`option[value="${runId}"]`)).toHaveCount(1)
   expect(await other.getByLabel('查看运行').locator('option').count()).toBe(optionsBefore + 1)
-
-  const origin = { origin: new URL(page.url()).origin }
-  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
-    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
-  }
 })
 
 test('an added tool is declared, called, and its result reaches the next request', async ({ page }) => {
-  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
   await page.goto('/')
   await page.getByRole('button', { name: '添加插件' }).click()
   await page.locator('.library__list li').filter({ hasText: 'calculator' }).getByRole('button', { name: '添加到根作用域' }).click()
@@ -208,15 +193,9 @@ test('an added tool is declared, called, and its result reaches the next request
   await expect(diff.getByRole('heading', { name: 'tools' }).locator('xpath=following-sibling::*[1]')).toHaveText('无差异')
   await expect(diff.locator('.diff__added', { hasText: '"role": "tool"' })).toHaveCount(1)
   await expect(diff.locator('.diff__added', { hasText: '"content": "3"' })).toHaveCount(1)
-
-  const origin = { origin: new URL(page.url()).origin }
-  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
-    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
-  }
 })
 
 test('a lesson does not attribute a run of other code to the code it shows', async ({ page }) => {
-  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
   await page.goto('/')
   await page.getByRole('button', { name: '运行教学代码' }).click()
   await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
@@ -244,13 +223,9 @@ test('a lesson does not attribute a run of other code to the code it shows', asy
   await expect(page.locator('.stage-state__requests')).toHaveCount(0)
 
   await page.request.put('/api/lessons/prompt-contributor/progress', { data: { lastStageId: '00-entry' }, headers: origin })
-  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
-    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
-  }
 })
 
 test('a lesson whose plugin is not in the selected run runs from its own composition and checks its checkpoints', async ({ page }) => {
-  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
   await page.goto('/plugin/tool-guard?stage=tool-guard@02-deny')
   await expect(page.getByText(/^阶段 3\/3 · /)).toBeVisible()
   await page.getByRole('button', { name: '运行此阶段' }).click()
@@ -266,13 +241,9 @@ test('a lesson whose plugin is not in the selected run runs from its own composi
 
   const origin = { origin: new URL(page.url()).origin }
   await page.request.put('/api/lessons/tool-guard/progress', { data: { lastStageId: '00-observe' }, headers: origin })
-  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
-    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
-  }
 })
 
 test('a section in a nested scope reaches only the sessions mapped to that scope (PROMPT-03 from the UI)', async ({ page }) => {
-  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
   await page.goto('/')
   await page.getByLabel('查看运行').selectOption('')
   const node = (name: string) => page.locator(`.react-flow__node[data-id="${name}"]`)
@@ -312,26 +283,22 @@ test('a section in a nested scope reaches only the sessions mapped to that scope
   // s-b assembles root + agent-b; s-d, after remounting, assembles root only.
   expect(system('with-section')).toBe('你是一个助手\n\n回答时使用英文')
   expect(system('after-remount')).toBe('你是一个助手')
-
-  const origin = { origin: new URL(page.url()).origin }
-  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
-    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
-  }
 })
 
 test('a preset composition replaces the draft after confirmation and runs as shipped', async ({ page }) => {
-  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
+  // Start with a run selected: loading a preset must show the replaced draft, not that run.
   await page.goto('/')
-  await page.getByLabel('查看运行').selectOption('')
+  await page.getByRole('button', { name: '运行教学代码' }).click()
+  await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
   const presets = page.getByRole('group', { name: '从预设开始' })
   await presets.getByLabel('预设组合').selectOption('scoped-chat')
   await presets.getByRole('button', { name: '载入预设…' }).click()
-  await expect(presets).toContainText('草稿的组合将被 scoped-chat 替换')
+  await expect(presets).toContainText('草稿的组合将被 scoped-chat 替换，场景切换为 prompt-scope')
   await presets.getByRole('button', { name: '确认载入' }).click()
+  await expect(page.getByLabel('查看运行')).toHaveValue('')
   await expect(page.locator('.react-flow__node[data-id="scoped-contributor"]')).toBeVisible()
   await expect(page.locator('.scope-editor summary')).toHaveText('作用域（2）')
-
-  await page.getByLabel('场景').selectOption('prompt-scope')
+  await expect(page.getByLabel('场景')).toHaveValue('prompt-scope')
   await page.getByRole('button', { name: '运行教学代码' }).click()
   await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
   const runId = await page.getByLabel('查看运行').inputValue()
@@ -342,9 +309,4 @@ test('a preset composition replaces the draft after confirmation and runs as shi
   const system = (step: string) => payloads[records.find(record => record.name === 'model/request' && record.scenarioStepId === step)!.payloadRef!]!.system
   expect(system('root-session')).toBe('你是一个助手\n\n回答时使用短句')
   expect(system('scoped-session')).toBe('你是一个助手\n\n回答时使用英文')
-
-  const origin = { origin: new URL(page.url()).origin }
-  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
-    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
-  }
 })

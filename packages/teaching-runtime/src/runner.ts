@@ -77,6 +77,25 @@ function checkConfigKeys(instance: PluginInstance, plugin: Plugin) {
   checkSupportedKeys(instance, Object.keys(schema?.dict ?? {}))
 }
 
+/**
+ * agent-loop assembles each session's prompt from the scope chain in its
+ * `sessionScopes` config. Assembly skips a scope it does not know, so a chain
+ * naming a missing scope, or not running from root down a parent path, would
+ * silently drop layers; it is refused here instead.
+ */
+function checkSessionScopes(instance: PluginInstance, composition: Composition) {
+  const sessionScopes = (instance.config as { sessionScopes?: unknown } | null)?.sessionScopes
+  if (!sessionScopes || typeof sessionScopes !== 'object') return
+  for (const [sessionId, chain] of Object.entries(sessionScopes)) {
+    if (!Array.isArray(chain) || !chain.every(item => typeof item === 'string')) continue
+    const last = chain.at(-1)
+    const expected = last && composition.scopes.some(scope => scope.id === last) ? scopeChain(composition, last) : null
+    if (!expected || expected.join('/') !== chain.join('/')) {
+      throw new CompositionError(`instance "${instance.id}" maps session "${sessionId}" to scope chain [${chain.join(', ')}], which is not a chain of this composition${expected ? ` (expected [${expected.join(', ')}])` : ''}`)
+    }
+  }
+}
+
 function checkSupportedKeys(instance: PluginInstance, supported: readonly string[]) {
   const unsupported = unsupportedConfigKeys(instance.config, supported)
   if (unsupported.length) {
@@ -119,6 +138,7 @@ export function validateComposition(composition: Composition, scenario: Scenario
     if (!scopeIds.has(instance.scopeId)) throw new CompositionError(`instance "${instance.id}" uses unknown scope "${instance.scopeId}"`)
     // Built stages carry their config keys, so a draft is refused before it becomes a revision.
     if (stage.configKeys) checkSupportedKeys(instance, stage.configKeys)
+    checkSessionScopes(instance, composition)
   }
   for (const instance of composition.instances) {
     if (instance.parentId !== null && !instanceIds.has(instance.parentId)) {

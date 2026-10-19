@@ -9,6 +9,7 @@ import { LessonBuild, sha256 } from '@harness-explorer/lesson-kit'
 import type { BuiltStage } from '@harness-explorer/lesson-kit'
 import { readFile } from 'node:fs/promises'
 import { hashJson } from '@harness-explorer/trace'
+import { z } from 'zod'
 
 export interface Catalog {
   /** Built lessons with stage code, when the catalog comes from `pnpm lessons:build`. */
@@ -23,6 +24,8 @@ export interface Catalog {
   modelScripts: Readonly<Record<string, ModelScript>>
   /** Preset compositions a learner can start a draft from. */
   compositions: Readonly<Record<string, Composition>>
+  /** The scenario written for each preset (fixtures/presets.json), applied when a preset is loaded. */
+  presetScenarios: Readonly<Record<string, string>>
   /**
    * Refuse stages whose shown code, current source or bundled module no longer
    * match the lesson build (docs/02 §2). Absent for the development catalog.
@@ -71,18 +74,32 @@ function readDir<T>(dir: string, parse: (value: unknown) => T, key: (value: T, f
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url))
 
+/** Preset → scenario pairs; each must name a preset and a scenario that exist. */
+function readPresetScenarios(path: string, compositions: Readonly<Record<string, Composition>>, scenarios: Readonly<Record<string, Scenario>>) {
+  if (!existsSync(path)) return {}
+  const pairs = z.record(z.string(), z.string()).parse(JSON.parse(readFileSync(path, 'utf8')))
+  for (const [preset, scenario] of Object.entries(pairs)) {
+    if (!compositions[preset]) throw new Error(`fixtures/presets.json names unknown composition "${preset}"`)
+    if (!scenarios[scenario]) throw new Error(`fixtures/presets.json pairs "${preset}" with unknown scenario "${scenario}"`)
+  }
+  return pairs
+}
+
 /** Development catalog: stages loaded from source, fixtures from the repository. */
 export function loadDevCatalog(root = repoRoot): Catalog {
   const lock = JSON.parse(readFileSync(join(root, 'upstream-lock.json'), 'utf8')) as { commit: string }
+  const scenarios = readDir(join(root, 'fixtures/scenarios'), value => Scenario.parse(value), value => value.id)
+  const compositions = readDir(join(root, 'fixtures/compositions'), value => Composition.parse(value), (_value, file) => file)
   return {
     contentVersion: 'dev',
     runtimeVersion: 'dev',
     upstreamCommit: lock.commit,
     stages: devStages,
     responsibilities,
-    scenarios: readDir(join(root, 'fixtures/scenarios'), value => Scenario.parse(value), value => value.id),
+    scenarios,
     modelScripts: readDir(join(root, 'fixtures/model-scripts'), value => ModelScript.parse(value), value => value.id),
-    compositions: readDir(join(root, 'fixtures/compositions'), value => Composition.parse(value), (_value, file) => file),
+    compositions,
+    presetScenarios: readPresetScenarios(join(root, 'fixtures/presets.json'), compositions, scenarios),
   }
 }
 
