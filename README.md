@@ -47,6 +47,7 @@ pnpm explorer     # 启动本地服务，终端打印带一次性令牌的链接
 | `pnpm lessons:verify-upstream` | 对固定 commit 核对上游源码引用（会克隆上游到 `.cache/`，或使用 `UPSTREAM_DIR`） |
 | `pnpm build:ui` | Next.js 静态导出界面 |
 | `pnpm test:e2e` | Playwright 浏览器端到端测试（需先 `pnpm build`） |
+| `pnpm check` | 按 CI 的顺序依次运行以上全部检查，任一失败即停止并返回非零退出码 |
 
 ## 目录
 
