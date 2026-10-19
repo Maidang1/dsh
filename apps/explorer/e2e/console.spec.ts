@@ -6,8 +6,8 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
-/** A draft that does not exist yet answers 404; the page then creates it. That one is expected. */
-const EXPECTED = [/\/api\/drafts\/main$/]
+/** A draft (the workbench's, or a lesson's) that does not exist yet answers 404; the page then creates it. */
+const EXPECTED = [/\/api\/drafts\/[^/]+$/]
 
 function watch(page: Page) {
   const problems: string[] = []
@@ -56,4 +56,43 @@ test('every lesson and its side panels', async ({ page, request }) => {
     for (let index = 1; index < lesson.stages.length; index++) await page.keyboard.press('ArrowRight')
   }
   expect(problems()).toEqual([])
+})
+
+test('lesson stage runs, run comparison, presets, scopes and the narrow layout', async ({ page, request, baseURL }) => {
+  const problems = watch(page)
+  const original = await request.get('/api/drafts/main').then(response => (response.ok() ? response.json() : null)) as ({ version: number } & Record<string, unknown>) | null
+  const runsBefore = (await request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
+
+  await page.goto('/plugin/tool-guard?stage=tool-guard@02-deny')
+  await page.getByRole('button', { name: '运行此阶段' }).click()
+  await page.getByRole('tab', { name: '状态与数据' }).click()
+  await expect(page.getByLabel('检查点对照')).toBeVisible({ timeout: 20_000 })
+  await page.getByRole('link', { name: '返回组合' }).click()
+
+  await page.getByRole('button', { name: '运行教学代码' }).click()
+  await expect(page.getByText(/运行结果：/)).toBeVisible({ timeout: 20_000 })
+  await page.getByRole('tab', { name: '请求对比' }).click()
+  await page.getByLabel('对照运行').selectOption({ index: 1 })
+  await page.locator('.run-diff summary', { hasText: '执行过程' }).click()
+
+  const presets = page.getByRole('group', { name: '从预设开始' })
+  await presets.getByLabel('预设组合').selectOption('scoped-chat')
+  await presets.getByRole('button', { name: '载入预设…' }).click()
+  await presets.getByRole('button', { name: '确认载入' }).click()
+  await page.locator('.scope-editor summary').click()
+  await page.locator('.react-flow__node[data-id="scoped-contributor"]').click()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('tablist', { name: '主区域' }).getByRole('tab', { name: '插件树' }).click()
+  expect(problems()).toEqual([])
+
+  if (original) {
+    const { version: _version, ...draft } = original
+    const { version } = await request.get('/api/drafts/main').then(response => response.json()) as { version: number }
+    await request.put('/api/drafts/main', { data: { expectedVersion: version, draft }, headers: { origin: baseURL! } })
+  }
+  await request.put('/api/lessons/tool-guard/progress', { data: { lastStageId: '00-observe' }, headers: { origin: baseURL! } })
+  for (const run of await request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
+    if (!runsBefore.includes(run.runId)) await request.delete(`/api/runs/${run.runId}`, { headers: { origin: baseURL! } })
+  }
 })
