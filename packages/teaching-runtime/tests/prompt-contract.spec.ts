@@ -2,7 +2,8 @@
  * PROMPT-01..04 contracts (docs/05-validation-and-release.md §3, §4.0), run on
  * the teaching runtime over real Cordis 4.0.5.
  */
-import { TraceName } from '@harness-explorer/contracts'
+import { Composition, Scenario, TraceName } from '@harness-explorer/contracts'
+import { readFileSync } from 'node:fs'
 import type { PluginPhasePayload, RegistrationAddPayload } from '@harness-explorer/contracts'
 import { Context } from '@deepseek-ai/cordis'
 import type { Plugin } from '@deepseek-ai/cordis'
@@ -161,5 +162,15 @@ describe('section order validity (docs/03 §7)', () => {
     expect(toPluginPhase(contributor.state)).toBe('failed')
     const assembly = (root.get('systemPrompt') as SystemPrompt).assemble()
     expect(assembly.sections.map(section => section.name)).toEqual(['deployment:persona'])
+  })
+})
+
+describe('PROMPT-03 preset: fixtures/compositions/scoped-chat.json with the prompt-scope scenario', () => {
+  it('gives the root session the outer section and the agent-b session the nested one', async () => {
+    const fixture = (path: string) => JSON.parse(readFileSync(new URL(`../../../fixtures/${path}`, import.meta.url), 'utf8'))
+    const result = await run({ composition: Composition.parse(fixture('compositions/scoped-chat.json')), scenario: Scenario.parse(fixture('scenarios/prompt-scope.json')) })
+    expect(result.error).toBeNull()
+    expect(requestsOf(result, 'root-session')[0]!.system).toBe(`你是一个助手\n\n${SECTION_TEXT}`)
+    expect(requestsOf(result, 'scoped-session')[0]!.system).toBe('你是一个助手\n\n回答时使用英文')
   })
 })

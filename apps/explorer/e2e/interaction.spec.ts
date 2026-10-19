@@ -318,3 +318,33 @@ test('a section in a nested scope reaches only the sessions mapped to that scope
     if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
   }
 })
+
+test('a preset composition replaces the draft after confirmation and runs as shipped', async ({ page }) => {
+  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
+  await page.goto('/')
+  await page.getByLabel('查看运行').selectOption('')
+  const presets = page.getByRole('group', { name: '从预设开始' })
+  await presets.getByLabel('预设组合').selectOption('scoped-chat')
+  await presets.getByRole('button', { name: '载入预设…' }).click()
+  await expect(presets).toContainText('草稿的组合将被 scoped-chat 替换')
+  await presets.getByRole('button', { name: '确认载入' }).click()
+  await expect(page.locator('.react-flow__node[data-id="scoped-contributor"]')).toBeVisible()
+  await expect(page.locator('.scope-editor summary')).toHaveText('作用域（2）')
+
+  await page.getByLabel('场景').selectOption('prompt-scope')
+  await page.getByRole('button', { name: '运行教学代码' }).click()
+  await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
+  const runId = await page.getByLabel('查看运行').inputValue()
+  const { records, payloads } = await page.request.get(`/api/runs/${runId}/trace`).then(response => response.json()) as {
+    records: Array<{ name: string; scenarioStepId?: string; payloadRef?: string }>
+    payloads: Record<string, { system: string }>
+  }
+  const system = (step: string) => payloads[records.find(record => record.name === 'model/request' && record.scenarioStepId === step)!.payloadRef!]!.system
+  expect(system('root-session')).toBe('你是一个助手\n\n回答时使用短句')
+  expect(system('scoped-session')).toBe('你是一个助手\n\n回答时使用英文')
+
+  const origin = { origin: new URL(page.url()).origin }
+  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
+    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
+  }
+})

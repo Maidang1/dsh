@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { TimelineRows } from './TimelineRows'
 import { ROOT_SCOPE, sameJson } from '@harness-explorer/contracts'
-import type { AdapterMode, EnvironmentSnapshot, JsonValue, PluginInstance, PluginPhasePayload, PluginResponsibility, RuntimeState, ScopeDefinition } from '@harness-explorer/contracts'
+import type { AdapterMode, Composition, EnvironmentSnapshot, JsonValue, PluginInstance, PluginPhasePayload, PluginResponsibility, RuntimeState, ScopeDefinition } from '@harness-explorer/contracts'
 import type { ViewRegistration, ViewSnapshot } from '@harness-explorer/trace/browser'
 import type { Draft, LessonsResponse, PublicCatalog, PublicStage } from '@/lib/api'
 import type { RunData } from '@/lib/store'
@@ -288,6 +288,34 @@ function ConfigEditor({ config, configKeys, onApply }: { config: JsonValue; conf
         <p className="warning-text">配置已在别处更新，上面是尚未应用的修改。 <button type="button" onClick={reload}>载入最新配置</button></p>
       ) : null}
       <button type="button" disabled={!changed} onClick={() => { if ('config' in result) { setBase(result.config); onApply(result.config) } }}>应用配置</button>
+    </div>
+  )
+}
+
+/**
+ * Start the draft over from a preset composition (fixtures/compositions).
+ * It replaces the draft's composition, so it asks first; runs keep their own revisions.
+ */
+export function PresetPicker({ presets, onLoad }: { presets: Readonly<Record<string, Composition>>; onLoad(id: string): void }) {
+  const ids = Object.keys(presets)
+  const [id, setId] = useState(ids[0] ?? '')
+  const [confirming, setConfirming] = useState(false)
+  if (!ids.length) return null
+  return (
+    <div className="preset-picker" role="group" aria-label="从预设开始">
+      <label>
+        预设组合
+        <select value={id} onChange={(event) => { setId(event.target.value); setConfirming(false) }}>
+          {ids.map(item => <option key={item} value={item}>{item}（{presets[item]!.instances.length} 个实例）</option>)}
+        </select>
+      </label>
+      {confirming ? (
+        <span>
+          草稿的组合将被 {id} 替换；场景保持不变，历史运行不受影响。
+          <button type="button" className="danger" onClick={() => { onLoad(id); setConfirming(false) }}>确认载入</button>
+          <button type="button" onClick={() => setConfirming(false)}>取消</button>
+        </span>
+      ) : <button type="button" onClick={() => setConfirming(true)}>载入预设…</button>}
     </div>
   )
 }

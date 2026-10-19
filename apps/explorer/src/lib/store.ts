@@ -23,6 +23,8 @@ import type { Draft, LearningProgress, LessonProgressUpdate, LessonsResponse, Pu
 
 export const DRAFT_ID = 'main'
 const DEFAULT_COMPOSITION = 'minimal-chat'
+/** The scenario written for the default composition; a fresh draft must not depend on fixture file order. */
+const DEFAULT_SCENARIO = 'prompt-section-lifecycle'
 
 export interface RunData {
   runId: string
@@ -205,7 +207,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
             id: DRAFT_ID,
             parentRevisionId: null,
             composition,
-            scenarioId: catalog.scenarios[0]!.id,
+            scenarioId: (catalog.scenarios.find(scenario => scenario.id === DEFAULT_SCENARIO) ?? catalog.scenarios[0]!).id,
             seed: 1,
           }, null)
         }

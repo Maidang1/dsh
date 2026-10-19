@@ -5,7 +5,7 @@ import type { PluginInstance } from '@harness-explorer/contracts'
 import { useExplorer, shownComposition, instanceById } from '@/lib/store'
 import { phaseHistory, useReplay } from '@/lib/replay'
 import { PluginList, PluginTree } from './PluginTree'
-import { Inspector, PluginLibrary, ReplayPosition, RunBar, ScopeEditor, Timeline, outcomeText } from './Panels'
+import { Inspector, PluginLibrary, PresetPicker, ReplayPosition, RunBar, ScopeEditor, Timeline, outcomeText } from './Panels'
 import { RequestDiff } from './RequestDiff'
 import { NarrowTabs, narrowPane } from './NarrowTabs'
 import { affectedConsumers, instancesFor, planAddition } from '@/lib/library'
@@ -151,6 +151,10 @@ export function Workbench() {
           responsibilities={catalog.responsibilities}
           draft={draft}
           onAdd={(selected, scopeId) => void updateInstances(instances => [...instances, ...instancesFor(selected, instances, scopeId)])}
+        />
+        <PresetPicker
+          presets={state.compositions}
+          onLoad={id => void state.editDraft(current => ({ ...current, parentRevisionId: null, composition: structuredClone(state.compositions[id]!) }))}
         />
         <ScopeEditor
           composition={draft.composition}
