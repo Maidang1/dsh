@@ -3,7 +3,8 @@
  * listed with the stage that would provide them, so "同时添加依赖" adds
  * exactly what the learner was shown, and nothing is filled in silently.
  */
-import type { PluginInstance } from '@harness-explorer/contracts'
+import { ROOT_SCOPE, unsupportedConfigKeys } from '@harness-explorer/contracts'
+import type { JsonValue, PluginInstance, ScopeDefinition } from '@harness-explorer/contracts'
 import type { PublicStage } from './api'
 
 export interface AdditionPlan {
@@ -54,7 +55,7 @@ export function planAddition(stages: readonly PublicStage[], instances: readonly
 }
 
 /** Instances for `stages` in `scopeId`, with ids unique within the composition. */
-export function instancesFor(stages: readonly PublicStage[], existing: readonly PluginInstance[], scopeId = 'root'): PluginInstance[] {
+export function instancesFor(stages: readonly PublicStage[], existing: readonly PluginInstance[], scopeId = ROOT_SCOPE): PluginInstance[] {
   const taken = new Set(existing.map(instance => instance.id))
   return stages.map(stage => {
     let id = stage.pluginDefinitionId
@@ -88,7 +89,7 @@ export function affectedConsumers(stages: readonly PublicStage[], instances: rea
 }
 
 /** Why `id` cannot name a new scope, or null when it can. */
-export function scopeIdProblem(id: string, scopes: ReadonlyArray<{ id: string }>): string | null {
+export function scopeIdProblem(id: string, scopes: readonly ScopeDefinition[]): string | null {
   if (!/^[a-z][a-z0-9-]*$/.test(id)) return '作用域名只能用小写字母、数字和连字符，并以字母开头'
   if (scopes.some(scope => scope.id === id)) return `已有作用域 ${id}`
   return null
@@ -98,15 +99,15 @@ export function scopeIdProblem(id: string, scopes: ReadonlyArray<{ id: string }>
  * Parse edited config text. Keys outside `configKeys` are named here so the
  * learner sees them before commit refuses the draft (CTX-04).
  */
-export function parseConfig(text: string, configKeys: readonly string[] | undefined): { config: Record<string, unknown> } | { problem: string } {
-  let value: unknown
+export function parseConfig(text: string, configKeys: readonly string[] | undefined): { config: { [key: string]: JsonValue } } | { problem: string } {
+  let value: JsonValue
   try {
     value = JSON.parse(text)
   } catch (error) {
     return { problem: `不是合法的 JSON：${error instanceof Error ? error.message : String(error)}` }
   }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { problem: '配置必须是 JSON 对象' }
-  const unsupported = configKeys ? Object.keys(value).filter(key => !configKeys.includes(key)) : []
+  const unsupported = configKeys ? unsupportedConfigKeys(value, configKeys) : []
   if (unsupported.length) return { problem: `不支持的配置项：${unsupported.join('、')}（支持：${configKeys!.join('、') || '无'}）` }
-  return { config: value as Record<string, unknown> }
+  return { config: value }
 }

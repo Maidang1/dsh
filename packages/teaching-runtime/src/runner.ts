@@ -5,7 +5,7 @@
  */
 import { Context } from '@deepseek-ai/cordis'
 import type { Fiber, Plugin } from '@deepseek-ai/cordis'
-import { TraceName } from '@harness-explorer/contracts'
+import { TraceName, unsupportedConfigKeys } from '@harness-explorer/contracts'
 import type {
   AdapterMode,
   Composition,
@@ -78,8 +78,7 @@ function checkConfigKeys(instance: PluginInstance, plugin: Plugin) {
 }
 
 function checkSupportedKeys(instance: PluginInstance, supported: readonly string[]) {
-  const given = instance.config && typeof instance.config === 'object' && !Array.isArray(instance.config) ? Object.keys(instance.config) : []
-  const unsupported = given.filter(key => !supported.includes(key))
+  const unsupported = unsupportedConfigKeys(instance.config, supported)
   if (unsupported.length) {
     throw new CompositionError(`instance "${instance.id}" (${instance.stageId}) does not support config ${unsupported.map(key => `"${key}"`).join(', ')}; supported: ${supported.join(', ') || 'none'}`)
   }
@@ -103,6 +102,12 @@ export function validateComposition(composition: Composition, scenario: Scenario
   const instanceIds = new Set<string>()
   const scopeIds = new Set(composition.scopes.map(scope => scope.id))
   if (!scopeIds.has(ROOT_SCOPE)) throw new CompositionError(`composition has no "${ROOT_SCOPE}" scope`)
+  for (const scope of composition.scopes) {
+    // scopeChain would otherwise end the chain at a missing parent and treat the scope as top-level.
+    if (scope.parentId !== null && !scopeIds.has(scope.parentId)) throw new CompositionError(`scope "${scope.id}" has unknown parent "${scope.parentId}"`)
+    if (scope.id === ROOT_SCOPE && scope.parentId !== null) throw new CompositionError(`scope "${ROOT_SCOPE}" cannot have a parent`)
+    scopeChain(composition, scope.id)
+  }
   for (const instance of composition.instances) {
     if (instanceIds.has(instance.id)) throw new CompositionError(`duplicate instance id "${instance.id}"`)
     instanceIds.add(instance.id)

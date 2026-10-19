@@ -154,10 +154,13 @@ export function Workbench() {
         />
         <ScopeEditor
           scopes={draft.composition.scopes}
-          onCreate={(id, parentId) => void state.editDraft(current => ({
-            ...current,
-            composition: { ...current.composition, scopes: [...current.composition.scopes, { id, parentId }] },
-          }))}
+          onCreate={async (id, parentId) => {
+            await state.editDraft(current => ({
+              ...current,
+              composition: { ...current.composition, scopes: [...current.composition.scopes, { id, parentId }] },
+            }))
+            return useExplorer.getState().draft?.composition.scopes.some(scope => scope.id === id) ?? false
+          }}
         />
       </div>
 
@@ -198,7 +201,7 @@ export function Workbench() {
             onEnabled={(id, enabled) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, enabled } : item)))}
           scopes={composition.scopes}
           onScope={(id, scopeId) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, scopeId } : item)))}
-          onConfig={(id, config) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, config: config as PluginInstance['config'] } : item)))}
+          onConfig={(id, config) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, config } : item)))}
             history={phaseHistory(selected, instance?.id)}
             seq={replay.seq}
             onCursor={state.setCursor}

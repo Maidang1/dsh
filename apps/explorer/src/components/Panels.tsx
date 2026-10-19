@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { TimelineRows } from './TimelineRows'
-import type { AdapterMode, EnvironmentSnapshot, PluginInstance, PluginPhasePayload, PluginResponsibility, RuntimeState } from '@harness-explorer/contracts'
+import { ROOT_SCOPE, sameJson } from '@harness-explorer/contracts'
+import type { AdapterMode, EnvironmentSnapshot, JsonValue, PluginInstance, PluginPhasePayload, PluginResponsibility, RuntimeState, ScopeDefinition } from '@harness-explorer/contracts'
 import type { ViewRegistration, ViewSnapshot } from '@harness-explorer/trace/browser'
 import type { Draft, LessonsResponse, PublicCatalog, PublicStage } from '@/lib/api'
 import type { RunData } from '@/lib/store'
@@ -11,8 +12,6 @@ import { PHASE_LABEL, phaseOf } from './PluginTree'
 import type { PhaseChange } from '@/lib/replay'
 import { latestStages, parseConfig, planAddition, scopeIdProblem } from '@/lib/library'
 import type { AffectedConsumer } from '@/lib/library'
-
-const ROOT_SCOPE = 'root'
 
 const PHASE_TEXT: Record<RuntimeState['phase'], string> = {
   idle: '空闲',
@@ -112,9 +111,9 @@ interface InspectorProps {
   onRemove(id: string): void
   onStage(id: string, stageId: string): void
   onEnabled(id: string, enabled: boolean): void
-  scopes: ReadonlyArray<{ id: string; parentId: string | null }>
+  scopes: readonly ScopeDefinition[]
   onScope(id: string, scopeId: string): void
-  onConfig(id: string, config: Record<string, unknown>): void
+  onConfig(id: string, config: { [key: string]: JsonValue }): void
   history: PhaseChange[]
   seq: number
   onCursor(seq: number): void
@@ -245,12 +244,13 @@ export function Inspector({ instance, stage, snapshot, lessons, editable, stages
             <label>
               作用域
               <select value={instance.scopeId} onChange={event => onScope(instance.id, event.target.value)}>
+                {scopes.some(scope => scope.id === instance.scopeId) ? null : <option value={instance.scopeId}>{instance.scopeId}（组合中不存在）</option>}
                 {scopes.map(scope => <option key={scope.id} value={scope.id}>{scope.id}{scope.parentId ? `（父：${scope.parentId}）` : ''}</option>)}
               </select>
             </label>
           ) : null}
-          <ConfigEditor key={`${instance.id}:${JSON.stringify(instance.config)}`} config={instance.config} configKeys={stage?.configKeys} onApply={config => onConfig(instance.id, config)} />
-          <RemoveControl key={instance.id} instanceId={instance.id} consumers={consumers} registrations={registrations} onRemove={onRemove} />
+          <ConfigEditor key={`config:${instance.id}`} config={instance.config} configKeys={stage?.configKeys} onApply={config => onConfig(instance.id, config)} />
+          <RemoveControl key={`remove:${instance.id}`} instanceId={instance.id} consumers={consumers} registrations={registrations} onRemove={onRemove} />
           <p className="muted">修改只影响草稿；下次运行会生成新的实验版本，历史运行保持不变。</p>
         </div>
       ) : <p className="muted">正在查看历史运行绑定的版本，返回草稿后才能编辑。</p>}
@@ -258,11 +258,25 @@ export function Inspector({ instance, stage, snapshot, lessons, editable, stages
   )
 }
 
-/** Edit an instance's config as JSON; unsupported keys are named before commit would refuse them. */
-function ConfigEditor({ config, configKeys, onApply }: { config: unknown; configKeys: readonly string[] | undefined; onApply(config: Record<string, unknown>): void }) {
-  const [text, setText] = useState(() => JSON.stringify(config ?? {}, null, 2))
+/**
+ * Edit an instance's config as JSON; unsupported keys are named before commit
+ * would refuse them. A config changed elsewhere replaces the text unless the
+ * learner has unsaved edits, which are kept until they choose.
+ */
+function ConfigEditor({ config, configKeys, onApply }: { config: JsonValue; configKeys: readonly string[] | undefined; onApply(config: { [key: string]: JsonValue }): void }) {
+  const show = (value: JsonValue) => JSON.stringify(value ?? {}, null, 2)
+  const [text, setText] = useState(() => show(config))
+  // The config the text started from or last applied.
+  const [base, setBase] = useState<JsonValue>(config)
   const result = parseConfig(text, configKeys)
-  const changed = 'config' in result && JSON.stringify(result.config) !== JSON.stringify(config ?? {})
+  const dirty = !('config' in result) || !sameJson(result.config, base)
+  const external = !sameJson(config, base)
+  const reload = () => { setText(show(config)); setBase(config) }
+  useEffect(() => {
+    if (external && !dirty) reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config])
+  const changed = 'config' in result && !sameJson(result.config, config)
   return (
     <div className="config-editor">
       <label>
@@ -270,15 +284,21 @@ function ConfigEditor({ config, configKeys, onApply }: { config: unknown; config
         <textarea value={text} rows={Math.min(8, text.split('\n').length + 1)} spellCheck={false} onChange={event => setText(event.target.value)} />
       </label>
       {'problem' in result ? <p className="error-text" role="status">{result.problem}</p> : null}
-      <button type="button" disabled={!changed} onClick={() => 'config' in result && onApply(result.config)}>应用配置</button>
+      {external && dirty ? (
+        <p className="warning-text">配置已在别处更新，上面是尚未应用的修改。 <button type="button" onClick={reload}>载入最新配置</button></p>
+      ) : null}
+      <button type="button" disabled={!changed} onClick={() => { if ('config' in result) { setBase(result.config); onApply(result.config) } }}>应用配置</button>
     </div>
   )
 }
 
 /** Scopes of the draft and a form to add one; instances choose their scope in the inspector. */
-export function ScopeEditor({ scopes, onCreate }: { scopes: ReadonlyArray<{ id: string; parentId: string | null }>; onCreate(id: string, parentId: string): void }) {
+export function ScopeEditor({ scopes, onCreate }: { scopes: readonly ScopeDefinition[]; onCreate(id: string, parentId: string): Promise<boolean> }) {
   const [id, setId] = useState('')
   const [parentId, setParentId] = useState(ROOT_SCOPE)
+  const [saving, setSaving] = useState(false)
+  // A parent picked earlier may have gone with a reloaded draft; never submit one that is not there.
+  const parent = scopes.some(scope => scope.id === parentId) ? parentId : ROOT_SCOPE
   const problem = id ? scopeIdProblem(id, scopes) : null
   return (
     <details className="scope-editor">
@@ -291,12 +311,23 @@ export function ScopeEditor({ scopes, onCreate }: { scopes: ReadonlyArray<{ id: 
       </label>
       <label>
         父作用域
-        <select value={parentId} onChange={event => setParentId(event.target.value)}>
+        <select value={parent} onChange={event => setParentId(event.target.value)}>
           {scopes.map(scope => <option key={scope.id} value={scope.id}>{scope.id}</option>)}
         </select>
       </label>
       {problem ? <p className="error-text" role="status">{problem}</p> : null}
-      <button type="button" disabled={!id || problem !== null} onClick={() => { onCreate(id, parentId); setId('') }}>新建作用域</button>
+      <button
+        type="button"
+        disabled={!id || problem !== null || saving}
+        onClick={async () => {
+          setSaving(true)
+          // Keep the name if the save did not take, e.g. the draft changed in another tab.
+          if (await onCreate(id, parent)) setId('')
+          setSaving(false)
+        }}
+      >
+        新建作用域
+      </button>
     </details>
   )
 }
