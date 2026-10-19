@@ -9,8 +9,10 @@ import type { Draft, LessonsResponse, PublicCatalog, PublicStage } from '@/lib/a
 import type { RunData } from '@/lib/store'
 import { PHASE_LABEL, phaseOf } from './PluginTree'
 import type { PhaseChange } from '@/lib/replay'
-import { latestStages, planAddition } from '@/lib/library'
+import { latestStages, parseConfig, planAddition, scopeIdProblem } from '@/lib/library'
 import type { AffectedConsumer } from '@/lib/library'
+
+const ROOT_SCOPE = 'root'
 
 const PHASE_TEXT: Record<RuntimeState['phase'], string> = {
   idle: '空闲',
@@ -110,6 +112,9 @@ interface InspectorProps {
   onRemove(id: string): void
   onStage(id: string, stageId: string): void
   onEnabled(id: string, enabled: boolean): void
+  scopes: ReadonlyArray<{ id: string; parentId: string | null }>
+  onScope(id: string, scopeId: string): void
+  onConfig(id: string, config: Record<string, unknown>): void
   history: PhaseChange[]
   seq: number
   onCursor(seq: number): void
@@ -169,7 +174,7 @@ function StateFix({ plugin, enabled, unavailable, editable, missingProviders, on
   return fix ? <p className="state-fix" aria-label="修复建议">修复：{fix}</p> : null
 }
 
-export function Inspector({ instance, stage, snapshot, lessons, editable, stagesOfDefinition, consumers, missingProviders, onAddProviders, onRemove, onStage, onEnabled, history, seq, onCursor }: InspectorProps) {
+export function Inspector({ instance, stage, snapshot, lessons, editable, stagesOfDefinition, consumers, missingProviders, onAddProviders, onRemove, onStage, onEnabled, history, seq, onCursor, scopes, onScope, onConfig }: InspectorProps) {
   if (!instance) return <aside className="inspector"><p className="muted">选择插件树中的一个实例查看状态与依赖。</p></aside>
   const plugin = snapshot.plugins[instance.id]
   const phase = phaseOf(plugin, instance.enabled)
@@ -236,11 +241,63 @@ export function Inspector({ instance, stage, snapshot, lessons, editable, stages
             <input type="checkbox" checked={instance.enabled} onChange={event => onEnabled(instance.id, event.target.checked)} />
             运行开始时挂载（否则由场景步骤挂载）
           </label>
+          {scopes.length > 1 ? (
+            <label>
+              作用域
+              <select value={instance.scopeId} onChange={event => onScope(instance.id, event.target.value)}>
+                {scopes.map(scope => <option key={scope.id} value={scope.id}>{scope.id}{scope.parentId ? `（父：${scope.parentId}）` : ''}</option>)}
+              </select>
+            </label>
+          ) : null}
+          <ConfigEditor key={`${instance.id}:${JSON.stringify(instance.config)}`} config={instance.config} configKeys={stage?.configKeys} onApply={config => onConfig(instance.id, config)} />
           <RemoveControl key={instance.id} instanceId={instance.id} consumers={consumers} registrations={registrations} onRemove={onRemove} />
           <p className="muted">修改只影响草稿；下次运行会生成新的实验版本，历史运行保持不变。</p>
         </div>
       ) : <p className="muted">正在查看历史运行绑定的版本，返回草稿后才能编辑。</p>}
     </aside>
+  )
+}
+
+/** Edit an instance's config as JSON; unsupported keys are named before commit would refuse them. */
+function ConfigEditor({ config, configKeys, onApply }: { config: unknown; configKeys: readonly string[] | undefined; onApply(config: Record<string, unknown>): void }) {
+  const [text, setText] = useState(() => JSON.stringify(config ?? {}, null, 2))
+  const result = parseConfig(text, configKeys)
+  const changed = 'config' in result && JSON.stringify(result.config) !== JSON.stringify(config ?? {})
+  return (
+    <div className="config-editor">
+      <label>
+        配置（JSON）{configKeys ? <span className="muted">支持：{configKeys.join('、') || '无'}</span> : null}
+        <textarea value={text} rows={Math.min(8, text.split('\n').length + 1)} spellCheck={false} onChange={event => setText(event.target.value)} />
+      </label>
+      {'problem' in result ? <p className="error-text" role="status">{result.problem}</p> : null}
+      <button type="button" disabled={!changed} onClick={() => 'config' in result && onApply(result.config)}>应用配置</button>
+    </div>
+  )
+}
+
+/** Scopes of the draft and a form to add one; instances choose their scope in the inspector. */
+export function ScopeEditor({ scopes, onCreate }: { scopes: ReadonlyArray<{ id: string; parentId: string | null }>; onCreate(id: string, parentId: string): void }) {
+  const [id, setId] = useState('')
+  const [parentId, setParentId] = useState(ROOT_SCOPE)
+  const problem = id ? scopeIdProblem(id, scopes) : null
+  return (
+    <details className="scope-editor">
+      <summary>作用域（{scopes.length}）</summary>
+      <ul>{scopes.map(scope => <li key={scope.id}>{scope.id}{scope.parentId ? <span className="muted">（父：{scope.parentId}）</span> : <span className="muted">（根）</span>}</li>)}</ul>
+      <p className="muted">作用域只决定提示词片段的分层：会话按 agent-loop 配置中的 sessionScopes 选择作用域链；服务在整个组合中解析。</p>
+      <label>
+        新作用域
+        <input value={id} onChange={event => setId(event.target.value.trim())} placeholder="例如 agent-b" />
+      </label>
+      <label>
+        父作用域
+        <select value={parentId} onChange={event => setParentId(event.target.value)}>
+          {scopes.map(scope => <option key={scope.id} value={scope.id}>{scope.id}</option>)}
+        </select>
+      </label>
+      {problem ? <p className="error-text" role="status">{problem}</p> : null}
+      <button type="button" disabled={!id || problem !== null} onClick={() => { onCreate(id, parentId); setId('') }}>新建作用域</button>
+    </details>
   )
 }
 
@@ -259,22 +316,33 @@ interface LibraryProps {
   stages: readonly PublicStage[]
   responsibilities: Readonly<Record<string, PluginResponsibility>>
   draft: Draft
-  /** Stages to add to the root scope, dependencies first. */
-  onAdd(stages: PublicStage[]): void
+  /** Stages to add to `scopeId`, dependencies first. */
+  onAdd(stages: PublicStage[], scopeId: string): void
 }
 
 export function PluginLibrary({ stages, responsibilities, draft, onAdd }: LibraryProps) {
   const [open, setOpen] = useState(false)
+  const scopes = draft.composition.scopes
+  const [scopeId, setScopeId] = useState(ROOT_SCOPE)
+  const target = scopes.some(scope => scope.id === scopeId) ? scopeId : ROOT_SCOPE
   const [filter, setFilter] = useState<PluginResponsibility | null>(null)
   const definitions = useMemo(() => latestStages(stages), [stages])
   const present = (Object.keys(RESPONSIBILITY_LABEL) as PluginResponsibility[])
     .filter(responsibility => definitions.some(stage => responsibilities[stage.pluginDefinitionId] === responsibility))
-  const add = (selected: PublicStage[]) => { onAdd(selected); setOpen(false) }
+  const add = (selected: PublicStage[]) => { onAdd(selected, target); setOpen(false) }
   return (
     <div className="library">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}>添加插件</button>
       {open ? (
         <div className="library__panel">
+        {scopes.length > 1 ? (
+          <label>
+            加入作用域
+            <select value={target} onChange={event => setScopeId(event.target.value)}>
+              {scopes.map(scope => <option key={scope.id} value={scope.id}>{scope.id}</option>)}
+            </select>
+          </label>
+        ) : null}
         <div className="segmented" role="group" aria-label="按职责筛选">
           <button type="button" aria-pressed={filter === null} onClick={() => setFilter(null)}>全部</button>
           {present.map(responsibility => (
@@ -303,7 +371,7 @@ export function PluginLibrary({ stages, responsibilities, draft, onAdd }: Librar
                     {plan.unresolved.length ? <div>插件库中没有提供 {plan.unresolved.join('、')} 的插件</div> : null}
                   </div>
                 ) : null}
-                <button type="button" onClick={() => add([latest])}>{missing.length ? '只添加此插件' : '添加到根作用域'}</button>
+                <button type="button" onClick={() => add([latest])}>{missing.length ? '只添加此插件' : target === ROOT_SCOPE ? '添加到根作用域' : `添加到作用域 ${target}`}</button>
                 {plan.providers.length ? (
                   <button type="button" onClick={() => add(plan.stages)}>同时添加依赖（共 {plan.stages.length} 个实例）</button>
                 ) : null}

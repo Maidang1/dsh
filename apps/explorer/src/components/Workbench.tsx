@@ -1,10 +1,11 @@
 'use client'
 /** 整体组合 workspace: tree, selection summary, timeline and request comparison (docs/01 §3.1, §4). */
 import { useEffect, useState } from 'react'
+import type { PluginInstance } from '@harness-explorer/contracts'
 import { useExplorer, shownComposition, instanceById } from '@/lib/store'
 import { phaseHistory, useReplay } from '@/lib/replay'
 import { PluginList, PluginTree } from './PluginTree'
-import { Inspector, PluginLibrary, ReplayPosition, RunBar, Timeline, outcomeText } from './Panels'
+import { Inspector, PluginLibrary, ReplayPosition, RunBar, ScopeEditor, Timeline, outcomeText } from './Panels'
 import { RequestDiff } from './RequestDiff'
 import { NarrowTabs, narrowPane } from './NarrowTabs'
 import { affectedConsumers, instancesFor, planAddition } from '@/lib/library'
@@ -149,7 +150,14 @@ export function Workbench() {
           stages={catalog.stages}
           responsibilities={catalog.responsibilities}
           draft={draft}
-          onAdd={selected => void updateInstances(instances => [...instances, ...instancesFor(selected, instances)])}
+          onAdd={(selected, scopeId) => void updateInstances(instances => [...instances, ...instancesFor(selected, instances, scopeId)])}
+        />
+        <ScopeEditor
+          scopes={draft.composition.scopes}
+          onCreate={(id, parentId) => void state.editDraft(current => ({
+            ...current,
+            composition: { ...current.composition, scopes: [...current.composition.scopes, { id, parentId }] },
+          }))}
         />
       </div>
 
@@ -188,6 +196,9 @@ export function Workbench() {
             onRemove={id => void updateInstances(instances => instances.filter(item => item.id !== id))}
             onStage={(id, stageId) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, stageId } : item)))}
             onEnabled={(id, enabled) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, enabled } : item)))}
+          scopes={composition.scopes}
+          onScope={(id, scopeId) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, scopeId } : item)))}
+          onConfig={(id, config) => void updateInstances(instances => instances.map(item => (item.id === id ? { ...item, config: config as PluginInstance['config'] } : item)))}
             history={phaseHistory(selected, instance?.id)}
             seq={replay.seq}
             onCursor={state.setCursor}

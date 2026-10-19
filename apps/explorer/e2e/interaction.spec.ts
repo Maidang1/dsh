@@ -270,3 +270,45 @@ test('a lesson whose plugin is not in the selected run runs from its own composi
     if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
   }
 })
+
+test('a section in a nested scope reaches only the sessions mapped to that scope (PROMPT-03 from the UI)', async ({ page }) => {
+  const runsBefore = (await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>).map(run => run.runId)
+  await page.goto('/')
+  await page.getByLabel('查看运行').selectOption('')
+  const node = (name: string) => page.locator(`.react-flow__node[data-id="${name}"]`)
+  const config = page.locator('.config-editor textarea')
+
+  await page.locator('.scope-editor summary').click()
+  await page.getByLabel('新作用域').fill('agent-b')
+  await page.getByRole('button', { name: '新建作用域' }).click()
+  await expect(page.locator('.scope-editor summary')).toHaveText('作用域（2）')
+
+  await node('prompt-contributor').click()
+  await page.getByRole('complementary', { name: '实例摘要' }).getByLabel('作用域').selectOption('agent-b')
+  await config.fill('{"txt": "回答时使用英文"}')
+  await expect(page.locator('.config-editor')).toContainText('不支持的配置项：txt（支持：name、order、text）')
+  await config.fill('{"text": "回答时使用英文"}')
+  await page.getByRole('button', { name: '应用配置' }).click()
+
+  await node('agent-loop').click()
+  await config.fill('{"sessionScopes": {"s-b": ["root", "agent-b"]}}')
+  await page.getByRole('button', { name: '应用配置' }).click()
+  await expect(config).toHaveValue(/"s-b"/)
+
+  await page.getByRole('button', { name: '运行教学代码' }).click()
+  await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
+  const runId = await page.getByLabel('查看运行').inputValue()
+  const { records, payloads } = await page.request.get(`/api/runs/${runId}/trace`).then(response => response.json()) as {
+    records: Array<{ name: string; scenarioStepId?: string; payloadRef?: string }>
+    payloads: Record<string, { system: string }>
+  }
+  const system = (step: string) => payloads[records.find(record => record.name === 'model/request' && record.scenarioStepId === step)!.payloadRef!]!.system
+  // s-b assembles root + agent-b; s-d, after remounting, assembles root only.
+  expect(system('with-section')).toBe('你是一个助手\n\n回答时使用英文')
+  expect(system('after-remount')).toBe('你是一个助手')
+
+  const origin = { origin: new URL(page.url()).origin }
+  for (const run of await page.request.get('/api/runs').then(response => response.json()) as Array<{ runId: string }>) {
+    if (!runsBefore.includes(run.runId)) await page.request.delete(`/api/runs/${run.runId}`, { headers: origin })
+  }
+})

@@ -189,3 +189,9 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 .phase-history button { border: 0; background: transparent; padding: 2px 4px; text-align: left; width: 100%; }
 .phase-history button[aria-current='step'] { background: var(--current); }
 .phase-history li.is-future { opacity: .45; }
+
+.config-editor { display: grid; gap: 4px; }
+.config-editor textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.scope-editor { position: relative; }
+.scope-editor[open] { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.scope-editor ul { margin: 0; padding-left: 18px; }

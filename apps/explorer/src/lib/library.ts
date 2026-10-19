@@ -53,14 +53,14 @@ export function planAddition(stages: readonly PublicStage[], instances: readonly
   return plan
 }
 
-/** Root-scope instances for `stages`, with ids unique within the composition. */
-export function instancesFor(stages: readonly PublicStage[], existing: readonly PluginInstance[]): PluginInstance[] {
+/** Instances for `stages` in `scopeId`, with ids unique within the composition. */
+export function instancesFor(stages: readonly PublicStage[], existing: readonly PluginInstance[], scopeId = 'root'): PluginInstance[] {
   const taken = new Set(existing.map(instance => instance.id))
   return stages.map(stage => {
     let id = stage.pluginDefinitionId
     for (let suffix = 2; taken.has(id); suffix++) id = `${stage.pluginDefinitionId}-${suffix}`
     taken.add(id)
-    return { id, definitionId: stage.pluginDefinitionId, stageId: stage.id, scopeId: 'root', parentId: null, enabled: true, config: {} }
+    return { id, definitionId: stage.pluginDefinitionId, stageId: stage.id, scopeId, parentId: null, enabled: true, config: {} }
   })
 }
 
@@ -85,4 +85,28 @@ export function affectedConsumers(stages: readonly PublicStage[], instances: rea
     const services = (byId.get(instance.stageId)?.requires ?? []).filter(service => lost.includes(service))
     return services.length ? [{ instanceId: instance.id, services }] : []
   })
+}
+
+/** Why `id` cannot name a new scope, or null when it can. */
+export function scopeIdProblem(id: string, scopes: ReadonlyArray<{ id: string }>): string | null {
+  if (!/^[a-z][a-z0-9-]*$/.test(id)) return '作用域名只能用小写字母、数字和连字符，并以字母开头'
+  if (scopes.some(scope => scope.id === id)) return `已有作用域 ${id}`
+  return null
+}
+
+/**
+ * Parse edited config text. Keys outside `configKeys` are named here so the
+ * learner sees them before commit refuses the draft (CTX-04).
+ */
+export function parseConfig(text: string, configKeys: readonly string[] | undefined): { config: Record<string, unknown> } | { problem: string } {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch (error) {
+    return { problem: `不是合法的 JSON：${error instanceof Error ? error.message : String(error)}` }
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { problem: '配置必须是 JSON 对象' }
+  const unsupported = configKeys ? Object.keys(value).filter(key => !configKeys.includes(key)) : []
+  if (unsupported.length) return { problem: `不支持的配置项：${unsupported.join('、')}（支持：${configKeys!.join('、') || '无'}）` }
+  return { config: value as Record<string, unknown> }
 }
