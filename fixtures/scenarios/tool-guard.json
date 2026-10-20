@@ -1,0 +1,10 @@
+{
+  "id": "tool-guard",
+  "title": "调用一次工具：观察 tools/pre-execute 中间件的进入、委托与返回",
+  "modelScriptId": "calculator",
+  "memoryFiles": {},
+  "adapterModes": ["deterministic", "real"],
+  "steps": [
+    { "kind": "input", "id": "ask", "sessionId": "s", "text": "1+2" }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "minimal-chat": "prompt-section-lifecycle",
+  "tool-chat": "tool-guard",
+  "scoped-chat": "prompt-scope"
+}

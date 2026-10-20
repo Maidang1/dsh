@@ -1,0 +1,9 @@
+{
+  "id": "calculator",
+  "onUnmatched": "fail",
+  "rules": [
+    { "id": "call-add", "match": { "lastUserText": "1+2", "declaredTools": ["add"] }, "respond": { "kind": "tool-call", "tool": "add", "arguments": { "a": 1, "b": 2 } } },
+    { "id": "answer", "match": { "afterToolResult": "3" }, "respond": { "kind": "text", "chunks": ["结果是 3"] } },
+    { "id": "denied", "match": { "afterToolResult": "Error: add is blocked by policy" }, "respond": { "kind": "text", "chunks": ["这个工具被策略拒绝了"] } }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@harness-explorer/trace",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser": "./src/browser.ts"
+  },
+  "dependencies": {
+    "@harness-explorer/contracts": "workspace:*"
+  }
+}

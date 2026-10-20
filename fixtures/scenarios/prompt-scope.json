@@ -1,0 +1,24 @@
+{
+  "id": "prompt-scope",
+  "title": "两个会话：根作用域与嵌套作用域各看到哪段提示词",
+  "modelScriptId": "greeting",
+  "memoryFiles": {},
+  "adapterModes": [
+    "deterministic",
+    "real"
+  ],
+  "steps": [
+    {
+      "kind": "input",
+      "id": "root-session",
+      "sessionId": "s-root",
+      "text": "你好"
+    },
+    {
+      "kind": "input",
+      "id": "scoped-session",
+      "sessionId": "s-b",
+      "text": "你好"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@harness-explorer/teaching-runtime",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "4.0.5",
+    "@harness-explorer/contracts": "workspace:*",
+    "@harness-explorer/teaching-plugins": "workspace:*",
+    "@harness-explorer/trace": "workspace:*"
+  }
+}

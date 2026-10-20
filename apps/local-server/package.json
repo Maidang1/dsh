@@ -1,0 +1,18 @@
+{
+  "name": "@harness-explorer/local-server",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "4.0.5",
+    "@harness-explorer/contracts": "workspace:*",
+    "@harness-explorer/lesson-kit": "workspace:*",
+    "@harness-explorer/teaching-plugins": "workspace:*",
+    "@harness-explorer/teaching-runtime": "workspace:*",
+    "@harness-explorer/trace": "workspace:*",
+    "xstate": "^5.33.3",
+    "zod": "^4.6.7"
+  }
+}
