@@ -136,11 +136,15 @@ export class Observer {
       this.onCheckpoint?.(name)
     }))
 
-    keep(root.on('llm/request', (request) => {
-      this.record({ kind: 'data', name: TraceName.modelRequest, payload: request })
+    keep(root.on('llm/request', function (this: Context, request) {
+      // The llm service passes the calling context as `this` (the internal/service
+      // pattern); without it the record just has no instanceId.
+      const instanceId = observer.instanceOf(this?.fiber)
+      observer.record({ kind: 'data', name: TraceName.modelRequest, ...instanceId ? { instanceId } : {}, payload: request })
     }))
-    keep(root.on('llm/response', (requestId, response) => {
-      this.record({ kind: 'data', name: TraceName.modelResponse, payload: { requestId, ...response } })
+    keep(root.on('llm/response', function (this: Context, requestId, response) {
+      const instanceId = observer.instanceOf(this?.fiber)
+      observer.record({ kind: 'data', name: TraceName.modelResponse, ...instanceId ? { instanceId } : {}, payload: { requestId, ...response } })
     }))
   }
 

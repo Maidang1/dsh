@@ -244,7 +244,10 @@ export async function runScenario(input: RunInput): Promise<RunResult> {
   const runStep = async (step: ScenarioStep) => {
     switch (step.kind) {
       case 'input': {
-        const agentLoop = root.get('agentLoop')
+        // Drive the turn through the providing instance's own context, so records
+        // emitted inside the turn (llm/request, llm/response) attribute to it.
+        const provider = composition.instances.find(instance => fibers.has(instance.id) && stageById.get(instance.stageId)!.provides.includes('agentLoop'))
+        const agentLoop = (provider ? fibers.get(provider.id)!.ctx : root).get('agentLoop')
         if (!agentLoop) throw new Error('agentLoop is not active; check the plugin tree for missing services')
         const cancel = armedCancel
         const signal = AbortSignal.any([cancel?.controller.signal, input.signal].filter((item): item is AbortSignal => item !== undefined))

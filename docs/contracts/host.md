@@ -2,8 +2,8 @@
 
 ### TRACE-01 回放与跳转
 
-- 期望：任意 seq 的检查点跳转结果与从头归约一致。
-- 验证：`packages/trace/tests/trace.spec.ts`。状态：verified。
+- 期望：任意 seq 的检查点跳转结果与从头归约一致。`model/request`、`model/response` 记录的 `instanceId` 是发起该次调用的实例（如 agent-loop），与其他记录「记录所属实例」的语义不同。
+- 验证：`packages/trace/tests/trace.spec.ts`；归因语义见 `packages/teaching-runtime/tests/observation.spec.ts`「model request attribution」。状态：verified。
 
 ### BUILD-01 代码展示与执行
 

@@ -137,6 +137,13 @@ describe('SEC-02: access control', () => {
     expect(response.body).not.toContain(repo)
     expect(JSON.parse(response.body).stages[0]).not.toHaveProperty('module')
   })
+
+  it('exposes a layer for every catalog plugin definition', async () => {
+    const response = await authed('/api/catalog')
+    const body = JSON.parse(response.body) as { stages: Array<{ pluginDefinitionId: string }>, layers: Record<string, number> }
+    const definitions = [...new Set(body.stages.map(stage => stage.pluginDefinitionId))].sort()
+    expect(Object.keys(body.layers).sort()).toEqual(definitions)
+  })
 })
 
 describe('experiment API and HOST-01 reconnection', () => {

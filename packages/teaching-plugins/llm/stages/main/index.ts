@@ -15,8 +15,9 @@ declare module '@deepseek-ai/cordis' {
     llm: Llm
   }
   interface Events {
-    'llm/request'(request: ModelRequest): void
-    'llm/response'(requestId: string, response: ModelResponse): void
+    /** Emitted with the calling context as `this`, so observers can attribute the call. */
+    'llm/request'(this: Context, request: ModelRequest): void
+    'llm/response'(this: Context, requestId: string, response: ModelResponse): void
   }
 }
 
@@ -64,13 +65,15 @@ export class Llm extends Service {
   async complete(request: ModelRequest, signal?: AbortSignal): Promise<ModelResponse> {
     const adapter = this.current
     if (!adapter) throw new Error('no model adapter is registered')
-    this.ctx.emit('llm/request', request)
+    // Pass the calling context as `this` (the internal/service pattern), so the
+    // trace records the instance that initiated the request (explorer-redesign §5.1).
+    this.ctx.emit(this.ctx, 'llm/request', request)
     const response: ModelResponse = { text: '', toolCalls: [] }
     for await (const chunk of adapter.stream(request, signal)) {
       if (chunk.kind === 'text') response.text += chunk.text
       else response.toolCalls.push(chunk.call)
     }
-    this.ctx.emit('llm/response', request.requestId, response)
+    this.ctx.emit(this.ctx, 'llm/response', request.requestId, response)
     return response
   }
 }

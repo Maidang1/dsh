@@ -3,8 +3,8 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { isAbsolute, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Composition, ModelScript, Scenario } from '@harness-explorer/contracts'
-import type { ExecutableStageDefinition, JsonValue, PluginResponsibility } from '@harness-explorer/contracts'
-import { devStages, responsibilities } from '@harness-explorer/teaching-plugins'
+import type { ExecutableStageDefinition, JsonValue, PluginLayer, PluginResponsibility } from '@harness-explorer/contracts'
+import { devStages, layers, responsibilities } from '@harness-explorer/teaching-plugins'
 import { LessonBuild, sha256 } from '@harness-explorer/lesson-kit'
 import type { BuiltStage } from '@harness-explorer/lesson-kit'
 import { readFile } from 'node:fs/promises'
@@ -20,6 +20,8 @@ export interface Catalog {
   stages: readonly ExecutableStageDefinition[]
   /** Responsibility per plugin definition, for filtering the plugin library. */
   responsibilities: Readonly<Record<string, PluginResponsibility>>
+  /** Layer per plugin definition, for the layered plugin tree (explorer-redesign §5.2). */
+  layers: Readonly<Record<string, PluginLayer>>
   scenarios: Readonly<Record<string, Scenario>>
   modelScripts: Readonly<Record<string, ModelScript>>
   /** Preset compositions a learner can start a draft from. */
@@ -96,6 +98,7 @@ export function loadDevCatalog(root = repoRoot): Catalog {
     upstreamCommit: lock.commit,
     stages: devStages,
     responsibilities,
+    layers,
     scenarios,
     modelScripts: readDir(join(root, 'fixtures/model-scripts'), value => ModelScript.parse(value), value => value.id),
     compositions,

@@ -6,6 +6,7 @@ import type {
   ExecutableStageDefinition,
   ExperimentRevision,
   JsonValue,
+  PluginLayer,
   PluginResponsibility,
   RunManifest,
   RuntimeState,
@@ -21,6 +22,7 @@ export interface PublicCatalog {
   upstreamCommit: string
   stages: PublicStage[]
   responsibilities: Record<string, PluginResponsibility>
+  layers: Record<string, PluginLayer>
   presetScenarios: Record<string, string>
   scenarios: Scenario[]
 }
