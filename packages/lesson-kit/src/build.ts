@@ -8,7 +8,7 @@ import { join, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 import type { ExecutableStageDefinition, SourceRef } from '@harness-explorer/contracts'
-import { parseAnchors, sha256 } from './anchors.ts'
+import { excerptHash, parseAnchors, sha256 } from './anchors.ts'
 import { Architecture, AuthoredLesson, LessonBuild, UpstreamRef } from './schema.ts'
 import type { BuiltLesson, BuiltStage, CodeFile } from './schema.ts'
 
@@ -26,6 +26,8 @@ export interface BuildOptions {
   scenarioIds: ReadonlySet<string>
   contractIds: ReadonlySet<string>
   compositionIds: ReadonlySet<string>
+  /** Checkout of upstreamCommit. A lesson that reads an upstream stage needs it; with it, every upstream ref is checked at build time. */
+  upstreamDir?: string
 }
 
 const toPosix = (path: string) => path.split(sep).join('/')
@@ -120,6 +122,91 @@ function checkConfigSchema(stage: ExecutableStageDefinition, module: StageModule
   return schema.type === 'object' && schema.dict ? Object.keys(schema.dict) : undefined
 }
 
+interface UpstreamPackage {
+  /** Directory of the package in the upstream repository, e.g. packages/core/tools. */
+  dir: string
+  version: string
+}
+
+/** Every package of the upstream checkout (packages/<group>/<name>), by package name. */
+async function upstreamPackages(upstreamDir: string): Promise<Map<string, UpstreamPackage>> {
+  const result = new Map<string, UpstreamPackage>()
+  for (const group of await readdir(join(upstreamDir, 'packages'), { withFileTypes: true })) {
+    if (!group.isDirectory()) continue
+    for (const entry of await readdir(join(upstreamDir, 'packages', group.name), { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const dir = `packages/${group.name}/${entry.name}`
+      const manifest = await readFile(join(upstreamDir, dir, 'package.json'), 'utf8').catch(() => null)
+      if (manifest === null) continue
+      const { name, version } = JSON.parse(manifest) as { name?: string; version?: string }
+      if (name) result.set(name, { dir, version: version ?? '' })
+    }
+  }
+  return result
+}
+
+async function readUpstream(upstreamDir: string, path: string, commit: string) {
+  return readFile(join(upstreamDir, path), 'utf8').catch(() => {
+    throw new LessonBuildError(`${path} does not exist at the pinned commit ${commit.slice(0, 8)}`)
+  })
+}
+
+/** Check one excerpt against the checkout; returns the file's content. */
+async function checkUpstreamRef(ref: UpstreamRef, options: BuildOptions & { upstreamDir: string }, where: string) {
+  const content = await readUpstream(options.upstreamDir, ref.path, options.upstreamCommit)
+  let actual: string
+  try {
+    actual = excerptHash(content, ref.startLine, ref.endLine)
+  } catch (error) {
+    throw new LessonBuildError(`${where}: upstream ref "${ref.id}" (${ref.path}): ${error instanceof Error ? error.message : String(error)}`)
+  }
+  check(actual === ref.contentHash, `${where}: upstream ref "${ref.id}" (${ref.path}:${ref.startLine}-${ref.endLine}) no longer matches the pinned commit; its content hash is ${actual}`)
+  return content
+}
+
+/**
+ * An upstream stage as a lesson shows it: the package's TypeScript source at
+ * the pinned commit beside the published module that runs. Source and module
+ * are bound by package name and version — the npm release is the pinned
+ * commit's tag (docs/decisions/0002). The lesson's upstream refs that fall in
+ * this package become the stage's anchors (`<stage id>#<ref id>`); the shown
+ * files are the entry plus every file those refs cite.
+ */
+async function buildUpstreamStage(
+  stage: ExecutableStageDefinition,
+  refs: readonly UpstreamRef[],
+  packages: ReadonlyMap<string, UpstreamPackage>,
+  options: BuildOptions & { upstreamDir: string },
+): Promise<BuiltStage> {
+  const where = `upstream stage ${stage.id}`
+  check(stage.package, `${where} names no npm package`)
+  const source = packages.get(stage.package.name)
+  check(source, `${where}: ${stage.package.name} is not in the upstream checkout at ${options.upstreamCommit.slice(0, 8)}`)
+  check(source.version === stage.package.version, `${where}: the checkout has ${stage.package.name}@${source.version}, but the run loads ${stage.package.version}`)
+  const entry = `${source.dir}/src/index.ts`
+  const own = refs.filter(ref => ref.path.startsWith(`${source.dir}/src/`))
+  const paths = [entry, ...new Set(own.map(ref => ref.path).filter(path => path !== entry).sort())]
+  const files: CodeFile[] = []
+  for (const path of paths) files.push({ path, content: await readUpstream(options.upstreamDir, path, options.upstreamCommit) })
+  const sourceRefs: SourceRef[] = []
+  for (const ref of own) {
+    await checkUpstreamRef(ref, options, where)
+    sourceRefs.push({
+      id: `${stage.id}#${ref.id}`,
+      origin: 'upstream',
+      revision: options.upstreamCommit,
+      path: ref.path,
+      symbol: ref.id,
+      startLine: ref.startLine,
+      endLine: ref.endLine,
+      contentHash: ref.contentHash,
+    })
+  }
+  const modulePath = toPosix(relative(options.repoRoot, stage.module))
+  // The shown files are not what runs, so the module keeps its own hash as the stage's sourceHash.
+  return { definition: { ...stage, module: modulePath }, modulePath, moduleHash: stage.sourceHash, files, sourceRefs }
+}
+
 async function importData(path: string): Promise<unknown> {
   const module = await import(pathToFileURL(path).href) as { default?: unknown }
   if (module.default === undefined) throw new LessonBuildError(`${path} has no default export`)
@@ -130,18 +217,31 @@ function check(condition: unknown, message: string): asserts condition {
   if (!condition) throw new LessonBuildError(message)
 }
 
-async function buildLesson(dir: string, options: BuildOptions, stages: ReadonlyMap<string, BuiltStage>): Promise<BuiltLesson> {
-  const lesson = AuthoredLesson.parse(await importData(join(dir, 'manifest.ts')))
-  const architecture = Architecture.parse(await importData(join(dir, 'architecture.ts')))
-  const upstream = UpstreamRef.array().parse(await importData(join(dir, 'upstream-map.ts')))
-  const mdx = await readFile(join(dir, 'lesson.mdx'), 'utf8')
+interface LessonContent {
+  lesson: AuthoredLesson
+  architecture: Architecture
+  upstream: UpstreamRef[]
+  mdx: string
+}
+
+async function loadLesson(dir: string): Promise<LessonContent> {
+  return {
+    lesson: AuthoredLesson.parse(await importData(join(dir, 'manifest.ts'))),
+    architecture: Architecture.parse(await importData(join(dir, 'architecture.ts'))),
+    upstream: UpstreamRef.array().parse(await importData(join(dir, 'upstream-map.ts'))),
+    mdx: await readFile(join(dir, 'lesson.mdx'), 'utf8'),
+  }
+}
+
+function buildLesson({ lesson, architecture, upstream, mdx }: LessonContent, options: BuildOptions, stages: ReadonlyMap<string, BuiltStage>): BuiltLesson {
   const where = `lesson ${lesson.id}`
 
   check(options.compositionIds.has(lesson.compositionId), `${where}: unknown composition "${lesson.compositionId}"`)
   const upstreamIds = new Set(upstream.map(ref => ref.id))
+  check(upstreamIds.size === upstream.length, `${where}: duplicate upstream ref id`)
   const nodeIds = new Set(architecture.nodes.map(node => node.id))
-  const teachingRefIds = new Set([...stages.values()].flatMap(stage => stage.sourceRefs.map(ref => ref.id)))
-  const knownRef = (id: string) => teachingRefIds.has(id) || upstreamIds.has(id)
+  const stageRefIds = new Set([...stages.values()].flatMap(stage => stage.sourceRefs.map(ref => ref.id)))
+  const knownRef = (id: string) => stageRefIds.has(id) || upstreamIds.has(id)
 
   for (const node of architecture.nodes) {
     for (const ref of node.sourceRefIds) check(knownRef(ref), `${where}: architecture node "${node.id}" cites unknown source ref "${ref}"`)
@@ -168,8 +268,8 @@ async function buildLesson(dir: string, options: BuildOptions, stages: ReadonlyM
     if (stage.kind === 'executable') {
       check(stage.scenarioIds.length > 0 && stage.contractIds.length > 0, `${at}: executable stages need scenarios and contracts`)
     }
-    // docs/05 §7: every stage says what it leaves out, and teaching checkpoints keep their plugin's namespace.
-    check(stage.simplifications.length > 0, `${at}: list at least one simplification against upstream`)
+    // docs/05 §7: every teaching stage says what it leaves out against upstream; upstream code leaves nothing out.
+    if (code.definition.origin === 'teaching') check(stage.simplifications.length > 0, `${at}: list at least one simplification against upstream`)
     for (const name of stage.expectedCheckpoints ?? []) {
       check(name.startsWith(`${lesson.pluginDefinitionId}:`), `${at}: checkpoint "${name}" is outside the "${lesson.pluginDefinitionId}:" namespace`)
     }
@@ -184,23 +284,48 @@ export async function buildLessons(options: BuildOptions): Promise<LessonBuild> 
   const stages = new Map<string, BuiltStage>()
   for (const stage of options.stages.filter(item => item.origin === 'teaching')) stages.set(stage.id, await buildStage(stage, options))
 
-  const lessons: BuiltLesson[] = []
+  const contents: LessonContent[] = []
   if (existsSync(options.contentDir)) {
     for (const entry of (await readdir(options.contentDir, { withFileTypes: true })).filter(item => item.isDirectory())) {
-      lessons.push(await buildLesson(join(options.contentDir, entry.name), options, stages))
+      contents.push(await loadLesson(join(options.contentDir, entry.name)))
     }
   }
+
+  // Upstream stages are shown from the pinned checkout, so they exist only once a lesson reads them.
+  const upstreamStages = new Map<string, BuiltStage>()
+  const upstreamDir = options.upstreamDir
+  if (upstreamDir) {
+    const withDir = { ...options, upstreamDir }
+    const packages = await upstreamPackages(upstreamDir)
+    for (const { lesson, upstream } of contents) {
+      for (const ref of upstream) await checkUpstreamRef(ref, withDir, `lesson ${lesson.id}`)
+      const read = new Set(lesson.stages.map(stage => stage.codeStageId))
+      for (const stage of options.stages.filter(item => item.origin === 'upstream' && read.has(item.id))) {
+        check(!upstreamStages.has(stage.id), `lesson ${lesson.id}: upstream stage ${stage.id} is already read by another lesson`)
+        upstreamStages.set(stage.id, await buildUpstreamStage(stage, upstream, packages, withDir))
+      }
+    }
+  } else {
+    for (const { lesson } of contents) {
+      const upstream = lesson.stages.find(stage => options.stages.some(item => item.id === stage.codeStageId && item.origin === 'upstream'))
+      check(!upstream, `lesson ${lesson.id} reads upstream stage ${upstream?.codeStageId}; the build needs a checkout of ${options.upstreamCommit.slice(0, 8)} (upstreamDir)`)
+    }
+  }
+
+  const shown = new Map([...stages, ...upstreamStages])
+  const lessons = contents.map(content => buildLesson(content, options, shown))
   for (const lesson of lessons) {
     for (const stage of lesson.stages) {
-      check(stages.get(stage.codeStageId)!.definition.pluginDefinitionId === lesson.pluginDefinitionId,
+      check(shown.get(stage.codeStageId)!.definition.pluginDefinitionId === lesson.pluginDefinitionId,
         `lesson ${lesson.id} stage ${stage.id}: code stage belongs to another plugin`)
     }
   }
 
   const stageList = [...stages.values()]
+  const upstreamList = [...upstreamStages.values()]
   // Definitions include requires/provides, so a dependency change is a content change too.
-  const contentVersion = sha256(JSON.stringify({ stages: stageList.map(stage => stage.definition), lessons }))
-  const result = LessonBuild.parse({ schemaVersion: 1, contentVersion, upstreamCommit: options.upstreamCommit, stages: stageList, lessons })
+  const contentVersion = sha256(JSON.stringify({ stages: stageList.map(stage => stage.definition), upstreamStages: upstreamList.map(stage => stage.definition), lessons }))
+  const result = LessonBuild.parse({ schemaVersion: 1, contentVersion, upstreamCommit: options.upstreamCommit, stages: stageList, upstreamStages: upstreamList, lessons })
   await mkdir(options.outDir, { recursive: true })
   await writeFile(join(options.outDir, 'lessons.json'), JSON.stringify(result, null, 2) + '\n')
   return result

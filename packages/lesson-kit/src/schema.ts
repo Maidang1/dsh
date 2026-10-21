@@ -116,6 +116,12 @@ export const LessonBuild = z.object({
   contentVersion: Id,
   upstreamCommit: Id,
   stages: z.array(BuiltStage),
+  /**
+   * Upstream stages a lesson reads: the package's TypeScript source at the
+   * pinned commit, shown beside the published module that runs. Nothing here
+   * is bundled, and the run catalog never takes stages from this list.
+   */
+  upstreamStages: z.array(BuiltStage).optional(),
   lessons: z.array(BuiltLesson),
 })
 export type LessonBuild = z.infer<typeof LessonBuild>

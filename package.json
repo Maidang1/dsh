@@ -14,6 +14,7 @@
     "lessons:build": "tsx scripts/build-lessons.ts",
     "lessons:verify": "tsx scripts/verify-lessons.ts",
     "lessons:verify-upstream": "tsx scripts/verify-source-links.ts",
+    "lessons:ref": "tsx scripts/upstream-ref.ts",
     "build:ui": "pnpm --filter @harness-explorer/explorer build",
     "build": "pnpm lessons:build && pnpm build:ui",
     "test:e2e": "playwright test",

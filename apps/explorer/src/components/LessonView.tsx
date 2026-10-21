@@ -310,6 +310,15 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
     // A fresh object, so locating the same anchor again scrolls again.
     setLocated({ ...ref })
   }
+  // Upstream files run to thousands of lines: entering a stage brings its first focused excerpt into view.
+  useEffect(() => {
+    const first = view.sourceRefs
+      .filter(ref => stage.focusAnchors.includes(ref.symbol ?? ''))
+      .sort((a, b) => view.files.findIndex(file => file.path === a.path) - view.files.findIndex(file => file.path === b.path) || a.startLine - b.startLine)[0]
+    if (!first) return
+    setFileKey(view.files.find(item => item.path === first.path)!.key)
+    setLocated({ ...first })
+  }, [view, stage])
   useEffect(() => {
     if (!located) return
     // Code Hike renders one child per source line under the <pre>'s wrapper.
@@ -499,6 +508,9 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
             <span className="code-legend"><i className="code-legend__modified" aria-hidden />修改</span>
             <span className="code-legend"><i className="code-legend__focus" aria-hidden />焦点 · 本步讲解</span>
             <span className="spacer" />
+            {view.origin === 'upstream' ? (
+              <span className="muted">上游原文 · commit {lesson.upstreamCommit.slice(0, 8)} · 运行发布包 {view.package?.name}@{view.package?.version}</span>
+            ) : null}
             <span className={`lesson__hash${runMatches ? ' is-match' : ''}`}>sourceHash {stage.sourceHash.slice(7, 13)} · {hashState}</span>
           </div>
           <p className="sr-only" aria-live="polite">{located ? `已定位到 ${located.path} 第 ${located.startLine}–${located.endLine} 行（${located.symbol}）` : ''}</p>
@@ -652,9 +664,18 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
                   ))}
                 </ul>
               ) : <p className="muted">本阶段没有对应的上游片段。</p>}
-              <h3>精简说明</h3>
-              {stage.simplifications.length ? <ul>{stage.simplifications.map(item => <li key={item}>{item}</li>)}</ul> : <p className="muted">无</p>}
-              <p className="muted">左侧是本项目的精简教学实现，不是上游原文。行为对照（P5-04）尚未实现，因此这里只给出源码引用。</p>
+              {view.origin === 'upstream' ? (
+                <>
+                  {stage.simplifications.length ? <><h3>运行环境说明</h3><ul>{stage.simplifications.map(item => <li key={item}>{item}</li>)}</ul></> : null}
+                  <p className="muted">左侧是上游原文（commit {lesson.upstreamCommit.slice(0, 8)}），未经改写；运行此阶段执行的是该 commit 发布的 npm 包 {view.package?.name}@{view.package?.version}。</p>
+                </>
+              ) : (
+                <>
+                  <h3>精简说明</h3>
+                  {stage.simplifications.length ? <ul>{stage.simplifications.map(item => <li key={item}>{item}</li>)}</ul> : <p className="muted">无</p>}
+                  <p className="muted">左侧是本项目的精简教学实现，不是上游原文。行为对照（P5-04）尚未实现，因此这里只给出源码引用。</p>
+                </>
+              )}
             </div>
           ) : null}
         </aside>

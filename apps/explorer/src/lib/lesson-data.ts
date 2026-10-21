@@ -33,6 +33,10 @@ export interface LessonStageView {
   stage: BuiltLessonStage
   files: StageFileView[]
   sourceRefs: SourceRef[]
+  /** Upstream code is the package's source at the pinned commit; the published module of that release is what runs. */
+  origin: 'teaching' | 'upstream'
+  /** The npm package an upstream stage runs. */
+  package?: { name: string; version: string }
 }
 
 /** Lines of `after` that are new compared with `before` (1-based), by LCS. */
@@ -89,7 +93,7 @@ export async function lessonStageViews(lesson: BuiltLesson, stages: readonly Bui
       }
       files.push({ key: index === 0 ? 'entry' : file.path, path: file.path, code: highlighted, added: diff.added.length, removed: diff.removed })
     }
-    views.push({ stage, files, sourceRefs: code.sourceRefs })
+    views.push({ stage, files, sourceRefs: code.sourceRefs, origin: code.definition.origin, package: code.definition.package })
     if (code !== lastCode) { beforeLast = lastCode; lastCode = code }
   }
   return views
