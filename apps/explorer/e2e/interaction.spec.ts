@@ -118,9 +118,10 @@ test('filters the plugin library by responsibility', async ({ page }) => {
   await filter.getByRole('button', { name: '事件策略' }).click()
   await expect(names).toHaveText(['tool-guard'])
   // docs/01 §5.1: an entry shows its stages, config and source.
-  await expect(page.locator('.library__list li').filter({ hasText: 'tool-guard' })).toContainText('阶段：00-observe、01-two-layers、02-deny · 配置项：deny · 来源：教学精简实现')
+  await expect(page.locator('.library__list li').filter({ hasText: 'tool-guard' })).toContainText('阶段：00-observe、01-two-layers、02-deny · 配置项：deny · 来源：本项目教学插件')
   await filter.getByRole('button', { name: '全部' }).click()
-  await expect(names).toHaveCount(10)
+  // 8 upstream kernel definitions plus the 4 teaching ones.
+  await expect(names).toHaveCount(12)
 })
 
 test('shows a waiting instance as waiting for a service and offers its provider', async ({ page }) => {
@@ -273,11 +274,14 @@ test('a section in a nested scope reaches only the sessions mapped to that scope
   await config.fill('{"text": "回答时使用英文"}')
   await page.getByRole('button', { name: '应用配置' }).click()
 
-  await node('agent-loop').click()
-  await config.fill('{"sessionScopes": {"s-b": ["root", "agent-b"]}}')
-  await page.getByRole('button', { name: '应用配置' }).click()
-  await expect(config).toHaveValue(/"s-b"/)
-  await expect(page.locator('.scope-editor li', { hasText: 'agent-b' })).toContainText('不能删除：仍有实例：prompt-contributor')
+  // Upstream has no sessionScopes config: a scope lists the sessions whose agent lives in it.
+  await page.locator('.scope-editor summary').click()
+  const agentB = page.locator('.popover--scopes > ul > li', { hasText: 'agent-b' })
+  await agentB.getByLabel('添加会话').fill('s-b')
+  await agentB.getByRole('button', { name: '添加会话' }).click()
+  await expect(agentB.locator('.scope-sessions li', { hasText: 's-b' })).toBeVisible()
+  await expect(agentB).toContainText('不能删除：仍有实例：prompt-contributor')
+  await page.locator('.scope-editor summary').click()
 
   await page.getByRole('button', { name: '运行教学代码' }).click()
   await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
@@ -288,8 +292,8 @@ test('a section in a nested scope reaches only the sessions mapped to that scope
   }
   const system = (step: string) => payloads[records.find(record => record.name === 'model/request' && record.scenarioStepId === step)!.payloadRef!]!.system
   // s-b assembles root + agent-b; s-d, after remounting, assembles root only.
-  expect(system('with-section')).toBe('你是一个助手\n\n回答时使用英文')
-  expect(system('after-remount')).toBe('你是一个助手')
+  expect(system('with-section')).toBe('You are an AI agent powered by DeepSeek Harness.\n\n你是一个助手\n\n回答时使用英文')
+  expect(system('after-remount')).toBe('You are an AI agent powered by DeepSeek Harness.\n\n你是一个助手')
 })
 
 test('a preset composition replaces the draft after confirmation and runs as shipped', async ({ page }) => {
@@ -315,6 +319,33 @@ test('a preset composition replaces the draft after confirmation and runs as shi
     payloads: Record<string, { system: string }>
   }
   const system = (step: string) => payloads[records.find(record => record.name === 'model/request' && record.scenarioStepId === step)!.payloadRef!]!.system
-  expect(system('root-session')).toBe('你是一个助手\n\n回答时使用短句')
-  expect(system('scoped-session')).toBe('你是一个助手\n\n回答时使用英文')
+  expect(system('root-session')).toBe('You are an AI agent powered by DeepSeek Harness.\n\n你是一个助手\n\n回答时使用短句')
+  // s-b is listed by agent-b; its same-named section covers the root one.
+  expect(system('scoped-session')).toBe('You are an AI agent powered by DeepSeek Harness.\n\n你是一个助手\n\n回答时使用英文')
+})
+
+/**
+ * The npm section validates names on the server only (PackageManager.install's
+ * NAME_PATTERN); the UI just renders the 4xx. The search answer is stubbed at
+ * the browser edge so nothing here leaves localhost: a result whose name is not
+ * an @deepseek-ai/* package makes the server refuse the install with a 400.
+ */
+test('the npm section renders and an invalid package name shows the inline error', async ({ page }) => {
+  await page.route('**/api/packages/search?**', route => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ results: [{ name: 'left-pad', description: '不是内核包', version: '1.0.0', available: null, installed: false }] }),
+  }))
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加插件' }).click()
+  const npm = page.locator('.library__panel details', { has: page.getByText('从 npm 安装') })
+  await npm.locator('summary').click()
+  await expect(npm).toContainText('已安装（0）')
+  await expect(npm).toContainText('尚未安装任何 npm 包')
+
+  await npm.getByLabel('搜索 npm 包').fill('left-pad')
+  await npm.getByRole('button', { name: '搜索' }).click()
+  await expect(npm.locator('.library__list li', { hasText: 'left-pad' })).toBeVisible()
+
+  await npm.getByRole('button', { name: '安装' }).click()
+  await expect(npm.locator('.error-text')).toContainText('安装 npm 包失败。原因：package name "left-pad" is not an @deepseek-ai/* package')
 })

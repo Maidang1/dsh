@@ -42,9 +42,23 @@ export class StaleBuildError extends Error {
 
 const filesHash = (files: ReadonlyArray<{ path: string; content: string }>) => sha256(files.map(file => `${file.path}\0${file.content}\0`).join(''))
 
+/**
+ * An upstream stage is identified by the hash of the package entry it was
+ * cataloged from; a package changed on disk since then is refused.
+ */
+export async function verifyUpstreamStages(stages: readonly ExecutableStageDefinition[]) {
+  for (const stage of stages.filter(item => item.origin === 'upstream')) {
+    const module = await readFile(stage.module, 'utf8').catch(() => null)
+    if (module === null || sha256(module) !== stage.sourceHash) {
+      throw new StaleBuildError(`${stage.package?.name ?? stage.id} changed on disk after the explorer started; run pnpm install and restart pnpm explorer`)
+    }
+  }
+}
+
 export async function verifyBuiltStages(root: string, built: ReadonlyMap<string, BuiltStage>, stages: readonly ExecutableStageDefinition[]) {
   const rebuild = 'run pnpm lessons:build and restart pnpm explorer'
-  for (const stage of stages) {
+  await verifyUpstreamStages(stages)
+  for (const stage of stages.filter(item => item.origin === 'teaching')) {
     const entry = built.get(stage.id)
     if (!entry) throw new StaleBuildError(`stage ${stage.id} is not in the lesson build; ${rebuild}`)
     if (filesHash(entry.files) !== entry.definition.sourceHash) {
@@ -99,6 +113,7 @@ export function loadDevCatalog(root = repoRoot): Catalog {
     stages: devStages,
     responsibilities,
     layers,
+    verifyStages: verifyUpstreamStages,
     scenarios,
     modelScripts: readDir(join(root, 'fixtures/model-scripts'), value => ModelScript.parse(value), value => value.id),
     compositions,
@@ -136,9 +151,12 @@ export function loadBuiltCatalog(root = repoRoot): Catalog | null {
     lessons,
     contentVersion: lessons.contentVersion,
     verifyStages: stages => verifyBuiltStages(root, built, stages),
-    stages: lessons.stages.map(stage => ({
-      ...stage.definition,
-      module: isAbsolute(stage.modulePath) ? stage.modulePath : join(root, stage.modulePath),
-    })),
+    stages: [
+      ...dev.stages.filter(stage => stage.origin === 'upstream'),
+      ...lessons.stages.map(stage => ({
+        ...stage.definition,
+        module: isAbsolute(stage.modulePath) ? stage.modulePath : join(root, stage.modulePath),
+      })),
+    ],
   }
 }

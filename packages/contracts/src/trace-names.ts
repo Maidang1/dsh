@@ -52,7 +52,7 @@ export const RegistrationRemovePayload = z.object({
 export type RegistrationRemovePayload = z.infer<typeof RegistrationRemovePayload>
 
 export const ModelMessage = z.object({
-  role: z.enum(['system', 'user', 'assistant', 'tool']),
+  role: z.enum(['system', 'developer', 'user', 'assistant', 'tool']),
   content: z.string(),
   toolCallId: z.string().optional(),
   toolCalls: z.array(z.object({ id: z.string(), name: z.string(), arguments: JsonValue })).optional(),
@@ -61,6 +61,8 @@ export type ModelMessage = z.infer<typeof ModelMessage>
 
 export const ModelRequestPayload = z.object({
   requestId: z.string(),
+  provider: z.string().optional(),
+  model: z.string().optional(),
   system: z.string(),
   messages: z.array(ModelMessage),
   tools: z.array(z.object({ name: z.string(), description: z.string(), parameters: JsonValue })),

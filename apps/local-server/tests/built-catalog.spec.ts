@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { buildLessons } from '@harness-explorer/lesson-kit'
 import type { LessonBuild } from '@harness-explorer/lesson-kit'
-import type { Composition } from '@harness-explorer/contracts'
+import type { Composition, ExecutableStageDefinition } from '@harness-explorer/contracts'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildOptions, repoRoot } from '../../../scripts/lesson-env.ts'
 import { loadBuiltCatalog, loadDevCatalog, verifyBuiltStages } from '../src/catalog.ts'
@@ -30,12 +30,18 @@ afterAll(async () => {
   await rm(storeDir, { recursive: true, force: true })
 })
 
+/** The built catalog's stages: upstream packages as published, teaching stages from the bundles (as loadBuiltCatalog does). */
+const builtStages = (): ExecutableStageDefinition[] => [
+  ...loadDevCatalog().stages.filter(stage => stage.origin === 'upstream'),
+  ...lessons.stages.map(stage => ({ ...stage.definition, module: join(repoRoot, stage.modulePath) })),
+]
+
 it('runs bundled stage modules and records the hashes the lesson shows', async () => {
   const catalog = {
     ...loadDevCatalog(),
     lessons,
     contentVersion: lessons.contentVersion,
-    stages: lessons.stages.map(stage => ({ ...stage.definition, module: join(repoRoot, stage.modulePath) })),
+    stages: builtStages(),
   }
   const store = new RunStore(storeDir)
   const composition: Composition = JSON.parse(await readFile(join(repoRoot, 'fixtures/compositions/minimal-chat.json'), 'utf8'))
@@ -54,7 +60,7 @@ it('runs bundled stage modules and records the hashes the lesson shows', async (
 })
 
 describe('stage integrity before a run (docs/02 §2)', () => {
-  const definitions = () => lessons.stages.map(stage => ({ ...stage.definition, module: join(repoRoot, stage.modulePath) }))
+  const definitions = builtStages
   const built = () => new Map(lessons.stages.map(stage => [stage.definition.id, stage]))
   const contributor = () => definitions().filter(stage => stage.id === 'prompt-contributor@02-section')
 
@@ -108,9 +114,10 @@ describe('stage integrity before a run (docs/02 §2)', () => {
 
 describe('config keys at commit time (CTX-04)', () => {
   it('refuses a draft whose config names a key the stage does not support, before any revision exists', async () => {
-    const catalog = { ...loadDevCatalog(), lessons, contentVersion: lessons.contentVersion, stages: lessons.stages.map(stage => ({ ...stage.definition, module: join(repoRoot, stage.modulePath) })) }
-    expect(catalog.stages.find(stage => stage.id === 'system-prompt@main')?.configKeys).toEqual(['persona'])
-    expect(catalog.stages.find(stage => stage.id === 'tools@main')?.configKeys).toEqual([])
+    const catalog = { ...loadDevCatalog(), lessons, contentVersion: lessons.contentVersion, stages: builtStages() }
+    expect(catalog.stages.find(stage => stage.id === 'prompt-contributor@02-section')?.configKeys).toEqual(['name', 'order', 'text'])
+    // Upstream stages run as published; the runner validates their config, the catalog lists no keys.
+    expect(catalog.stages.find(stage => stage.id === 'system-prompt@0.2.1-rc.2')?.configKeys).toBeUndefined()
     const store = new RunStore(await mkdtemp(join(tmpdir(), 'explorer-config-')))
     const composition: Composition = JSON.parse(await readFile(join(repoRoot, 'fixtures/compositions/minimal-chat.json'), 'utf8'))
     composition.instances = composition.instances.map(instance => (instance.id === 'prompt-contributor' ? { ...instance, config: { txt: '只用一句话' } } : instance))

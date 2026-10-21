@@ -1,8 +1,8 @@
 # 提示词契约
 
 - 上游：`packages/core/system-prompt/src/index.ts`（`SystemPrompt.section()`、`PromptLayer`、`ScopedLayers`、`renderPrompt`）。
-- 教学实现：`packages/teaching-plugins/system-prompt/stages/main/index.ts`，贡献插件 `packages/teaching-plugins/prompt-contributor/stages/*`。
-- 不支持：运行时上下文、变量与插值、complete section、`system-prompt/assemble` waterfall。
+- 执行实现：npm 包 `@deepseek-ai/dsh-system-prompt@0.2.1-rc.2` 原样执行（[decisions/0002](../decisions/0002-run-upstream-packages.md)）；贡献插件为项目代码 `packages/teaching-plugins/prompt-contributor/stages/*`。
+- 默认系统文本：`You are an AI agent powered by DeepSeek Harness.` 加上 `personaPrefix`（夹具中为 `你是一个助手`）；身份行可用 `includeHarnessIdentity: false` 关闭（CTX-04）。
 
 ### PROMPT-01 添加片段
 

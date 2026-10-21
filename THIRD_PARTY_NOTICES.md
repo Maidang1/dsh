@@ -4,7 +4,7 @@
 
 ## deepseek-ai/deepseek-harness
 
-`packages/teaching-plugins` 中的核心插件（session、system-prompt、tools、llm、llm-scripted、llm-deepseek、agent-loop）是依据 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 固定 commit `687f282e8625c6b8d11ff58211a90524be2e4317`（见 `upstream-lock.json`）精简改写的实现：保留了上游的服务名、事件名与部分错误信息，文件头部注明对应的上游路径以及保留和删减的行为。prompt-contributor、tool-guard、calculator 是本项目编写的教学插件，没有对应的上游文件。课程内容引用上游源码时只给出链接、行号与内容哈希。
+学习对象：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)，固定 commit `687f282e8625c6b8d11ff58211a90524be2e4317`（见 `upstream-lock.json`）。本仓库不复制其源码文件：对话内核以 npm 发布的 `@deepseek-ai/dsh-*` 包原样执行（见下节），课程内容引用上游源码时只给出链接、行号与内容哈希。prompt-contributor、tool-guard、calculator 与 llm-scripted 是本项目编写的教学插件，没有对应的上游文件；它们与上游的差异写在课程清单的 `simplifications` 与 `upstream-map.ts` 中。上游仓库及以下 `@deepseek-ai/dsh-*` 包使用同一份许可证：
 
 ```text
 MIT License
@@ -29,6 +29,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## @deepseek-ai/dsh-*（对话内核）
+
+从 npm 原样引入，未修改，版本均为 `0.2.1-rc.2`——上游在固定 commit 上打的 `dsh-v0.2.1-rc.2` 标签的发布（见 `docs/decisions/0002-run-upstream-packages.md`）：
+
+- 直接依赖：`@deepseek-ai/dsh-llm`、`dsh-session`、`dsh-session-projection`、`dsh-system-prompt`、`dsh-tools`、`dsh-agent`、`dsh-agent-loop`（最小对话内核），`dsh-llm-deepseek`、`dsh-llm-deepseek-api-key`（真实模型适配），`dsh-scope`（作用域），`dsh-credentials`、`dsh-launch-environment`（适配器所需的 peer 依赖）。
+- 经 pnpm 引入的间接依赖（如 `dsh-anonymous-user-id`、`dsh-brand`、`dsh-util-values`、`dsh-typert-protocol` 等）同为 `@0.2.1-rc.2`、同一许可证。
+
+各包内的 `LICENSE` 均为上节的 MIT License（Copyright (c) 2026 DeepSeek），不再逐包复制。
 
 ## @deepseek-ai/cordis、@deepseek-ai/cosmokit、@deepseek-ai/schemastery
 

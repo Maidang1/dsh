@@ -65,13 +65,33 @@ export function processLines(data: Trace): string[] {
   })
 }
 
-/** Durable session events, one line each, grouped by session in recorded order. */
+/**
+ * Durable session events, one line each, grouped by session in recorded order.
+ * Upstream stamps assistant stream records with the wall clock (`time` on raw
+ * chunks, `time0`/`dt` on packed runs — `AssistantStreamRecord` in dsh-llm),
+ * so two runs of the same conversation still differ there; those fields are
+ * left out and the lines compare stream content only.
+ */
 export function sessionLines(data: Trace): string[] {
   return scenarioRecords(data)
     .filter(record => record.name === 'session/event')
     .map(record => {
       const event = payload(data, record) as { sessionId: string; type: string; data: JsonValue } | undefined
-      return event ? `${event.sessionId} · ${event.type}${compact(event.data)}` : ''
+      return event ? `${event.sessionId} · ${event.type}${compact(withoutStreamTimes(event.data))}` : ''
     })
     .filter(Boolean)
+}
+
+/** Event data without the assistant stream's wall-clock stamps; other events pass through unchanged. */
+function withoutStreamTimes(data: JsonValue): JsonValue {
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) return data
+  const { stream, ...rest } = data as { stream?: JsonValue } & Record<string, JsonValue>
+  if (!Array.isArray(stream)) return data
+  return {
+    ...rest,
+    stream: stream.map(record =>
+      record !== null && typeof record === 'object' && !Array.isArray(record)
+        ? Object.fromEntries(Object.entries(record).filter(([key]) => key !== 'time' && key !== 'time0' && key !== 'dt'))
+        : record),
+  }
 }

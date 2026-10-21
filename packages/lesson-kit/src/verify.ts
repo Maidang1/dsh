@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { PluginPhasePayload, ServiceChangePayload, TraceName } from '@harness-explorer/contracts'
 import type { Composition, ExecutableStageDefinition, ModelScript, RunOutcome, Scenario } from '@harness-explorer/contracts'
+import { kernelStages } from '@harness-explorer/teaching-plugins'
 import { runScenario } from '@harness-explorer/teaching-runtime'
 import { recordedCheckpoints } from '@harness-explorer/trace'
 import type { RunResult } from '@harness-explorer/teaching-runtime'
@@ -34,10 +35,13 @@ export interface VerifyOptions {
  * are verified too, not only the final one.
  */
 export async function verifyStageRuns(lessonBuild: LessonBuild, options: VerifyOptions): Promise<StageRunReport[]> {
-  const stages = lessonBuild.stages.map(stage => ({
-    ...stage.definition,
-    module: isAbsolute(stage.modulePath) ? stage.modulePath : join(options.repoRoot, stage.modulePath),
-  }))
+  const stages = [
+    ...kernelStages(),
+    ...lessonBuild.stages.map(stage => ({
+      ...stage.definition,
+      module: isAbsolute(stage.modulePath) ? stage.modulePath : join(options.repoRoot, stage.modulePath),
+    })),
+  ]
   const reports: StageRunReport[] = []
   for (const lesson of lessonBuild.lessons) {
     const base = options.compositions[options.compositionOf(lesson.id)]!

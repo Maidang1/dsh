@@ -1,14 +1,17 @@
 'use client'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import { ROOT_SCOPE, sameJson } from '@harness-explorer/contracts'
 import type { AdapterMode, Composition, EnvironmentSnapshot, JsonValue, PluginInstance, PluginPhasePayload, PluginResponsibility, RuntimeState, ScopeDefinition } from '@harness-explorer/contracts'
 import type { ViewRegistration, ViewSnapshot } from '@harness-explorer/trace/browser'
-import type { Draft, LessonsResponse, PublicCatalog, PublicStage } from '@/lib/api'
+import { api } from '@/lib/api'
+import type { Draft, InstalledPackage, LessonsResponse, PackageSearchResult, PublicCatalog, PublicStage } from '@/lib/api'
+import { describeFailure } from '@/lib/errors'
+import { useExplorer } from '@/lib/store'
 import { PHASE_LABEL, phaseOf } from './PluginTree'
 import type { PhaseChange } from '@/lib/replay'
-import { latestStages, parseConfig, planAddition, scopeIdProblem, scopeRemovalProblem } from '@/lib/library'
+import { latestStages, parseConfig, planAddition, scopeIdProblem, scopeRemovalProblem, scopeSessionProblem } from '@/lib/library'
 import type { AffectedConsumer } from '@/lib/library'
 
 const PHASE_TEXT: Record<RuntimeState['phase'], string> = {
@@ -364,10 +367,12 @@ export function PresetPicker({ presets, scenarios, onLoad }: {
 }
 
 /** Scopes of the draft and a form to add one; instances choose their scope in the inspector. */
-export function ScopeEditor({ composition, onCreate, onRemove }: {
+export function ScopeEditor({ composition, onCreate, onRemove, onAddSession, onRemoveSession }: {
   composition: { scopes: readonly ScopeDefinition[]; instances: readonly PluginInstance[] }
   onCreate(id: string, parentId: string): Promise<boolean>
   onRemove(id: string): void
+  onAddSession(scopeId: string, sessionId: string): Promise<boolean>
+  onRemoveSession(scopeId: string, sessionId: string): void
 }) {
   const scopes = composition.scopes
   // One pass per draft change, not per scope on every render.
@@ -392,11 +397,14 @@ export function ScopeEditor({ composition, onCreate, onRemove }: {
                 {problem
                   ? <span className="muted"> · 不能删除：{problem}</span>
                   : <> <button type="button" className="link-button" onClick={() => onRemove(scope.id)}>删除</button></>}
+                {scope.id === ROOT_SCOPE ? null : (
+                  <ScopeSessions scope={scope} scopes={scopes} onAdd={onAddSession} onRemove={onRemoveSession} />
+                )}
               </li>
             )
           })}
         </ul>
-        <p className="muted">作用域只决定提示词片段的分层：会话按 agent-loop 配置中的 sessionScopes 选择作用域链；服务在整个组合中解析。</p>
+        <p className="muted">作用域是上游 dsh-scope 的注册层：作用域里的实例注册的提示词片段与工具只对住在该作用域的会话可见；会话由作用域的 sessions 列出，未列出的会话住在根作用域。服务在整个组合中解析。</p>
         <label>
           新作用域
           <input value={id} onChange={event => setId(event.target.value.trim())} placeholder="例如 agent-b" />
@@ -425,6 +433,53 @@ export function ScopeEditor({ composition, onCreate, onRemove }: {
   )
 }
 
+/**
+ * The sessions whose agent lives in `scope`, with add/remove. The add input
+ * keeps whitespace so the inline error can name it, mirroring the scope-name
+ * validation above; only the committed value is trimmed.
+ */
+function ScopeSessions({ scope, scopes, onAdd, onRemove }: {
+  scope: ScopeDefinition
+  scopes: readonly ScopeDefinition[]
+  onAdd(scopeId: string, sessionId: string): Promise<boolean>
+  onRemove(scopeId: string, sessionId: string): void
+}) {
+  const sessions = scope.sessions ?? []
+  const [id, setId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const problem = id ? scopeSessionProblem(id, scopes, scope.id) : null
+  return (
+    <div className="scope-sessions">
+      {sessions.length ? (
+        <ul>
+          {sessions.map(session => (
+            <li key={session}>
+              {session} <button type="button" className="link-button" onClick={() => onRemove(scope.id, session)}>移出</button>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="muted">没有会话住在这里；未列出的会话住在根作用域。</p>}
+      <label>
+        添加会话
+        <input value={id} onChange={event => setId(event.target.value)} placeholder="例如 s-b" />
+      </label>
+      {problem ? <p className="error-text" role="status">{problem}</p> : null}
+      <button
+        type="button"
+        disabled={!id || problem !== null || saving}
+        onClick={async () => {
+          setSaving(true)
+          // Keep the id if the save did not take, e.g. the draft changed in another tab.
+          if (await onAdd(scope.id, id.trim())) setId('')
+          setSaving(false)
+        }}
+      >
+        添加会话
+      </button>
+    </div>
+  )
+}
+
 const RESPONSIBILITY_LABEL: Record<PluginResponsibility, string> = {
   'session': '会话',
   'prompt': '提示词',
@@ -432,9 +487,99 @@ const RESPONSIBILITY_LABEL: Record<PluginResponsibility, string> = {
   'event-policy': '事件策略',
   'model': '模型适配',
   'agent-loop': '执行循环',
+  'other': '其他',
 }
 
 const responsibilityLabel = (responsibility: PluginResponsibility | undefined) => responsibility ? RESPONSIBILITY_LABEL[responsibility] : '未分类'
+
+/** npm 附加包：搜索 registry 上的 @deepseek-ai/dsh-* 包并装入或移出插件库。 */
+function NpmPackages() {
+  const [query, setQuery] = useState('')
+  const [searched, setSearched] = useState<string | null>(null)
+  const [results, setResults] = useState<PackageSearchResult[] | null>(null)
+  const [installed, setInstalled] = useState<InstalledPackage[] | null>(null)
+  const [busy, setBusy] = useState<{ action: 'install' | 'uninstall'; name: string } | null>(null)
+  const [problem, setProblem] = useState<string | null>(null)
+  const refreshCatalog = useExplorer(state => state.refreshCatalog)
+
+  const loadInstalled = async () => setInstalled(await api.packages())
+  useEffect(() => { void loadInstalled().catch(() => {}) }, [])
+
+  const search = async (text: string) => {
+    setResults((await api.searchPackages(text)).results)
+    setSearched(text)
+  }
+
+  // A new stage only appears in the library below once the catalog is refetched;
+  // re-running the current search keeps its 已安装 flags in step.
+  const changed = async () => {
+    await loadInstalled()
+    await refreshCatalog()
+    if (searched !== null) await search(searched)
+  }
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setProblem(null)
+    try {
+      await search(query)
+    } catch (error) {
+      setProblem(describeFailure('searchPackages', error))
+    }
+  }
+
+  const run = async (action: 'install' | 'uninstall', name: string) => {
+    setBusy({ action, name })
+    setProblem(null)
+    try {
+      await (action === 'install' ? api.installPackage(name) : api.uninstallPackage(name))
+      await changed()
+    } catch (error) {
+      setProblem(describeFailure(action === 'install' ? 'installPackage' : 'uninstallPackage', error))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <details>
+      <summary>从 npm 安装</summary>
+      <form onSubmit={event => void submit(event)}>
+        <input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索 @deepseek-ai/dsh-* 包" aria-label="搜索 npm 包" />
+        <button type="submit" disabled={busy !== null}>搜索</button>
+      </form>
+      {busy ? <p className="muted" role="status">{busy.action === 'install' ? '正在安装' : '正在卸载'} {busy.name}…</p> : null}
+      {problem ? <p className="error-text" role="status">{problem}</p> : null}
+      {results !== null ? (
+        results.length ? (
+          <ul className="library__list">
+            {results.map(item => (
+              <li key={item.name}>
+                <strong>{item.name}</strong> <span className="muted">{item.version}</span>
+                <div className="muted">{item.description || '（无描述）'}</div>
+                <button type="button" disabled={busy !== null || item.installed || item.available === false} onClick={() => void run('install', item.name)}>安装</button>
+                {item.installed ? <span className="muted">已安装</span>
+                  : item.available === false ? <span className="muted">没有与内核匹配的发布版本</span>
+                    : null}
+              </li>
+            ))}
+          </ul>
+        ) : <p className="muted">没有找到匹配的包</p>
+      ) : null}
+      <p><strong>已安装（{installed?.length ?? 0}）</strong></p>
+      {installed?.length ? (
+        <ul className="library__list">
+          {installed.map(item => (
+            <li key={item.name}>
+              <strong>{item.name}</strong> <span className="muted">{item.version}</span>
+              <button type="button" disabled={busy !== null} onClick={() => void run('uninstall', item.name)}>卸载</button>
+            </li>
+          ))}
+        </ul>
+      ) : installed !== null ? <p className="muted">尚未安装任何 npm 包</p> : null}
+    </details>
+  )
+}
 
 interface LibraryProps {
   stages: readonly PublicStage[]
@@ -471,6 +616,7 @@ export function PluginLibraryPanel({ stages, responsibilities, draft, onAdd, onC
           <h3>插件库</h3>
           <button type="button" aria-label="关闭插件库面板" onClick={onClose}>✕</button>
         </div>
+        <NpmPackages />
         {scopes.length > 1 ? (
           <label>
             加入作用域
@@ -498,7 +644,7 @@ export function PluginLibraryPanel({ stages, responsibilities, draft, onAdd, onC
                 <div className="muted">
                   阶段：{stages.filter(stage => stage.pluginDefinitionId === latest.pluginDefinitionId).map(stage => stage.id.split('@')[1]).join('、')}
                   {latest.configKeys ? ` · 配置项：${latest.configKeys.join('、') || '无'}` : ''}
-                  {' · 来源：'}{latest.origin === 'teaching' ? '教学精简实现' : `上游 ${latest.upstreamCommit?.slice(0, 8)}`}
+                  {' · 来源：'}{latest.origin === 'teaching' ? '本项目教学插件' : `npm ${latest.package?.name ?? ''}@${latest.package?.version ?? latest.upstreamCommit?.slice(0, 8)}`}
                 </div>
                 {missing.length ? (
                   <div className="warning-text">

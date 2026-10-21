@@ -16,6 +16,9 @@ const ACTIONS = {
   pinRun: '更改保留设置',
   importRun: '导入运行',
   cancel: '取消运行',
+  searchPackages: '搜索 npm 包',
+  installPackage: '安装 npm 包',
+  uninstallPackage: '卸载 npm 包',
 } as const
 
 export type FailedAction = keyof typeof ACTIONS

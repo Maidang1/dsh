@@ -5,7 +5,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type {} from '../../../system-prompt/stages/main/index.ts'
+import type {} from '@deepseek-ai/dsh-system-prompt'
 
 export const name = 'prompt-contributor'
 

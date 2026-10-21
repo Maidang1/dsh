@@ -1,3 +1,4 @@
+export * from './determinism.ts'
 export * from './fiber-phase.ts'
 export * from './observe.ts'
 export * from './runner.ts'

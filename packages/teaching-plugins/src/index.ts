@@ -1,12 +1,20 @@
 /**
- * Type surface of the teaching plugins. Importing this module also loads their
- * Cordis Context and Events augmentations.
+ * Teaching plugins and the catalog of every executable stage. The plugin
+ * services themselves come from the upstream packages; importing their types
+ * loads their Cordis Context and Events augmentations.
  */
-export type { PromptSection, PromptAssembly, SectionEntry, ToolSchema } from '../system-prompt/stages/main/index.ts'
-export type { DurableEventType, HistoryMessage, SessionEvent, ToolCall } from '../session/stages/main/index.ts'
-export type { ModelAdapter, ModelChunk, ModelRequest, ModelResponse } from '../llm/stages/main/index.ts'
-export type { PostToolDecision, PreToolDecision, ToolDefinition, ToolEntry, ToolExecution, ToolResult } from '../tools/stages/main/index.ts'
-export type { PreStep, PreStepDecision, TurnEndReason } from '../agent-loop/stages/main/index.ts'
-export { ROOT_SCOPE, SCOPE_CHAIN, scopeChainOf, withScopeChain } from '../shared/scope.ts'
 export { checkpoint } from '../shared/checkpoint.ts'
-export { devStages, layers, responsibilities } from './catalog.ts'
+export { SCRIPTED_PROVIDER, ScriptMismatchError } from '../llm-scripted/stages/main/index.ts'
+export { devStages, layers, responsibilities, teachingStages } from './catalog.ts'
+export {
+  UPSTREAM_COMMIT,
+  UPSTREAM_SCOPE,
+  UPSTREAM_VERSION,
+  UpstreamPackageError,
+  kernelPlugins,
+  kernelStages,
+  resolvePackage,
+  sha256,
+  upstreamStage,
+} from './upstream.ts'
+export type { UpstreamPlugin } from './upstream.ts'
