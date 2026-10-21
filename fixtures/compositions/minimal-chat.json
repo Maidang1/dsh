@@ -1,12 +1,93 @@
 {
-  "scopes": [{ "id": "root", "parentId": null }],
+  "scopes": [
+    {
+      "id": "root",
+      "parentId": null
+    }
+  ],
   "instances": [
-    { "id": "session", "definitionId": "session", "stageId": "session@main", "scopeId": "root", "parentId": null, "enabled": true, "config": {} },
-    { "id": "system-prompt", "definitionId": "system-prompt", "stageId": "system-prompt@main", "scopeId": "root", "parentId": null, "enabled": true, "config": { "persona": "你是一个助手" } },
-    { "id": "tools", "definitionId": "tools", "stageId": "tools@main", "scopeId": "root", "parentId": null, "enabled": true, "config": {} },
-    { "id": "llm", "definitionId": "llm", "stageId": "llm@main", "scopeId": "root", "parentId": null, "enabled": true, "config": {} },
-    { "id": "llm-scripted", "definitionId": "llm-scripted", "stageId": "llm-scripted@main", "scopeId": "root", "parentId": null, "enabled": true, "config": {} },
-    { "id": "agent-loop", "definitionId": "agent-loop", "stageId": "agent-loop@main", "scopeId": "root", "parentId": null, "enabled": true, "config": {} },
-    { "id": "prompt-contributor", "definitionId": "prompt-contributor", "stageId": "prompt-contributor@02-section", "scopeId": "root", "parentId": null, "enabled": false, "config": {} }
+    {
+      "id": "session",
+      "definitionId": "session",
+      "stageId": "session@0.2.1-rc.2",
+      "scopeId": "root",
+      "parentId": null,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "id": "session-projection",
+      "definitionId": "session-projection",
+      "stageId": "session-projection@0.2.1-rc.2",
+      "scopeId": "root",
+      "parentId": null,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "id": "system-prompt",
+      "definitionId": "system-prompt",
+      "stageId": "system-prompt@0.2.1-rc.2",
+      "scopeId": "root",
+      "parentId": null,
+      "enabled": true,
+      "config": {
+        "personaPrefix": "你是一个助手"
+      }
+    },
+    {
+      "id": "tools",
+      "definitionId": "tools",
+      "stageId": "tools@0.2.1-rc.2",
+      "scopeId": "root",
+      "parentId": null,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "id": "llm",
+      "definitionId": "llm",
+      "stageId": "llm@0.2.1-rc.2",
+      "scopeId": "root",
+      "parentId": null,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "id": "llm-scripted",
+      "definitionId": "llm-scripted",
+      "stageId": "llm-scripted@main",
+      "scopeId": "root",
+      "parentId": null,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "id": "agent",
+      "definitionId": "agent",
+      "stageId": "agent@0.2.1-rc.2",
+      "scopeId": "root",
+      "parentId": null,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "id": "agent-loop",
+      "definitionId": "agent-loop",
+      "stageId": "agent-loop@0.2.1-rc.2",
+      "scopeId": "root",
+      "parentId": null,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "id": "prompt-contributor",
+      "definitionId": "prompt-contributor",
+      "stageId": "prompt-contributor@02-section",
+      "scopeId": "root",
+      "parentId": null,
+      "enabled": false,
+      "config": {}
+    }
   ]
 }

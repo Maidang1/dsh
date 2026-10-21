@@ -6,6 +6,8 @@
 import { fork } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { TraceName } from '@harness-explorer/contracts'
 import type {
   AdapterMode,
@@ -261,7 +263,13 @@ export class RunController {
   private spawn(run: ActiveRun, start: StartMessage) {
     const workerPath = this.options.workerPath ?? new URL('./run-worker.ts', import.meta.url).pathname
     const execArgv = this.options.execArgv ?? ['--import', import.meta.resolve('tsx')]
-    const child = fork(workerPath, [], { execArgv, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env: this.options.env ?? process.env })
+    // Upstream packages read and write DSH_HOME (default ~/.dsh); pin it inside
+    // the store so the explorer never shares the user's real dsh home. It wins
+    // over any DSH_HOME the server's own environment carries.
+    const dshHome = join(this.options.store.root, 'dsh-home')
+    mkdirSync(dshHome, { recursive: true })
+    const env = { ...(this.options.env ?? process.env), DSH_HOME: dshHome }
+    const child = fork(workerPath, [], { execArgv, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env })
     run.child = child
     const secrets = secretValues(this.options.env)
     let stderr = ''

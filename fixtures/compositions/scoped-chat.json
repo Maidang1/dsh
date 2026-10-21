@@ -6,14 +6,26 @@
     },
     {
       "id": "agent-b",
-      "parentId": "root"
+      "parentId": "root",
+      "sessions": [
+        "s-b"
+      ]
     }
   ],
   "instances": [
     {
       "id": "session",
       "definitionId": "session",
-      "stageId": "session@main",
+      "stageId": "session@0.2.1-rc.2",
+      "scopeId": "root",
+      "parentId": null,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "id": "session-projection",
+      "definitionId": "session-projection",
+      "stageId": "session-projection@0.2.1-rc.2",
       "scopeId": "root",
       "parentId": null,
       "enabled": true,
@@ -22,18 +34,18 @@
     {
       "id": "system-prompt",
       "definitionId": "system-prompt",
-      "stageId": "system-prompt@main",
+      "stageId": "system-prompt@0.2.1-rc.2",
       "scopeId": "root",
       "parentId": null,
       "enabled": true,
       "config": {
-        "persona": "你是一个助手"
+        "personaPrefix": "你是一个助手"
       }
     },
     {
       "id": "tools",
       "definitionId": "tools",
-      "stageId": "tools@main",
+      "stageId": "tools@0.2.1-rc.2",
       "scopeId": "root",
       "parentId": null,
       "enabled": true,
@@ -42,7 +54,7 @@
     {
       "id": "llm",
       "definitionId": "llm",
-      "stageId": "llm@main",
+      "stageId": "llm@0.2.1-rc.2",
       "scopeId": "root",
       "parentId": null,
       "enabled": true,
@@ -58,20 +70,22 @@
       "config": {}
     },
     {
-      "id": "agent-loop",
-      "definitionId": "agent-loop",
-      "stageId": "agent-loop@main",
+      "id": "agent",
+      "definitionId": "agent",
+      "stageId": "agent@0.2.1-rc.2",
       "scopeId": "root",
       "parentId": null,
       "enabled": true,
-      "config": {
-        "sessionScopes": {
-          "s-b": [
-            "root",
-            "agent-b"
-          ]
-        }
-      }
+      "config": {}
+    },
+    {
+      "id": "agent-loop",
+      "definitionId": "agent-loop",
+      "stageId": "agent-loop@0.2.1-rc.2",
+      "scopeId": "root",
+      "parentId": null,
+      "enabled": true,
+      "config": {}
     },
     {
       "id": "prompt-contributor",

@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { TraceName } from '@harness-explorer/contracts'
 import type { ModelRequestPayload } from '@harness-explorer/contracts'
+import { teachingStages } from '@harness-explorer/teaching-plugins'
 import { runScenario } from '@harness-explorer/teaching-runtime'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { AnchorError, buildLessons, parseAnchors, sha256 } from '../src/index.ts'
@@ -60,14 +61,19 @@ describe('lesson build', () => {
       .rejects.toThrow('stage tool-guard@00-observe injects [tools] but the catalog lists requires [systemPrompt, tools]')
   })
 
+  it('builds only the teaching stages; upstream stages run as published and are skipped', () => {
+    expect(build.stages.every(item => item.definition.origin === 'teaching')).toBe(true)
+    expect(build.stages.map(item => item.definition.id).sort()).toEqual(teachingStages.map(item => item.id).sort())
+  })
+
   it('includes runtime imports and leaves out type-only ones', () => {
     expect(stage('prompt-contributor@02-section').files.map(file => file.path))
       .toEqual(['packages/teaching-plugins/prompt-contributor/stages/02-section/index.ts'])
-    expect(stage('agent-loop@main').files.map(file => file.path)).toEqual(expect.arrayContaining([
-      'packages/teaching-plugins/agent-loop/stages/main/index.ts',
-      'packages/teaching-plugins/system-prompt/stages/main/index.ts',
-      'packages/teaching-plugins/shared/scope.ts',
-    ]))
+    // A runtime import of project code joins the bundle; `import type` does not.
+    expect(stage('tool-guard@00-observe').files.map(file => file.path)).toEqual([
+      'packages/teaching-plugins/tool-guard/stages/00-observe/index.ts',
+      'packages/teaching-plugins/shared/checkpoint.ts',
+    ])
   })
 
   it('turns anchors into source refs whose lines hold the anchored text', () => {
@@ -123,6 +129,8 @@ describe('lesson validation', () => {
 })
 
 describe('early stages behave as their lesson says', () => {
+  // The upstream system-prompt plugin's default text: harness identity plus the fixture persona.
+  const BASELINE = 'You are an AI agent powered by DeepSeek Harness.\n\n你是一个助手'
   async function requestSystems(stageId: string) {
     const base = compositions['minimal-chat']!
     const composition = {
@@ -146,16 +154,16 @@ describe('early stages behave as their lesson says', () => {
 
   it('00-entry and 01-dependency leave every request equal to the baseline', async () => {
     for (const stageId of ['prompt-contributor@00-entry', 'prompt-contributor@01-dependency']) {
-      expect(new Set(await requestSystems(stageId))).toEqual(new Set(['你是一个助手']))
+      expect(new Set(await requestSystems(stageId))).toEqual(new Set([BASELINE]))
     }
   })
 
   it('02-section changes only the requests made while the plugin is mounted', async () => {
     expect(await requestSystems('prompt-contributor@02-section')).toEqual([
-      '你是一个助手',
-      '你是一个助手\n\n回答时使用短句',
-      '你是一个助手',
-      '你是一个助手\n\n回答时使用短句',
+      BASELINE,
+      `${BASELINE}\n\n回答时使用短句`,
+      BASELINE,
+      `${BASELINE}\n\n回答时使用短句`,
     ])
   })
 })

@@ -2,7 +2,7 @@
  * Node host integration: HOST-02, HOST-03, cancellation and SEC-01 on the
  * controller and run store, with real subprocesses.
  */
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -86,7 +86,7 @@ describe('run lifecycle through a subprocess', () => {
     expect(persisted.map(record => record.seq)).toEqual([...Array(manifest.lastSeq + 1).keys()])
     expect(persisted).toEqual(controller.current!.records)
     const request = persisted.find(record => record.name === TraceName.modelRequest)!
-    expect(await store.getPayload(request.payloadRef!)).toMatchObject({ system: '你是一个助手' })
+    expect(await store.getPayload(request.payloadRef!)).toMatchObject({ system: 'You are an AI agent powered by DeepSeek Harness.\n\n你是一个助手' })
 
     const phases = events.filter(event => event.type === 'state').map(event => event.state.phase)
     expect([...new Set(phases)]).toEqual(['validating', 'starting', 'running', 'settling', 'idle'])
@@ -151,6 +151,25 @@ describe('run lifecycle through a subprocess', () => {
     expect(await store.getManifest(runId)).toMatchObject({ outcome: 'terminated', completeness: 'truncated' })
     expect(controller.state().error?.message).toMatch(/terminated before cleanup finished/)
     expect(controller.phase).toBe('idle')
+  })
+})
+
+describe('DSH_HOME isolation', () => {
+  it('forks the worker with DSH_HOME inside the store, overriding the inherited one', async () => {
+    const probe = join(root, 'probe-out.txt')
+    const controller = new RunController({
+      store,
+      catalog,
+      workerPath: fileURLToPath(new URL('./fixtures/env-probe.ts', import.meta.url)),
+      env: { ...process.env, DSH_HOME: join(root, 'inherited-dsh-home'), ENV_PROBE_OUT: probe },
+    })
+    const revision = await revisionWith()
+    const runId = await controller.run(revision.id, 'deterministic')
+    await controller.whenSettled(runId)
+
+    expect(await store.getManifest(runId)).toMatchObject({ outcome: 'completed' })
+    expect(await readFile(probe, 'utf8')).toBe(join(root, 'dsh-home'))
+    expect((await stat(join(root, 'dsh-home'))).isDirectory()).toBe(true)
   })
 })
 
@@ -253,10 +272,13 @@ describe('real mode through a subprocess (P2-06)', () => {
       request.resume()
       request.on('end', () => {
         response.writeHead(200, { 'content-type': 'text/event-stream' })
+        // The upstream Messages API stream: message_start opens, message_delta carries the stop reason.
         const events = [
+          { type: 'message_start', message: { id: 'msg-1', type: 'message', role: 'assistant', content: [], model: 'deepseek-flash', usage: { input_tokens: 10, output_tokens: 0 } } },
           { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
           { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: '你好' } },
           { type: 'content_block_stop', index: 0 },
+          { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 2 } },
           { type: 'message_stop' },
         ]
         response.end(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''))
@@ -271,7 +293,7 @@ describe('real mode through a subprocess (P2-06)', () => {
       await controller.whenSettled(runId)
       const manifest = await store.getManifest(runId)
       expect(manifest).toMatchObject({ outcome: 'completed', adapterMode: 'real' })
-      expect(Object.keys(manifest.loadedSourceHashes)).toContain('llm-deepseek@main')
+      expect(Object.keys(manifest.loadedSourceHashes)).toContain('llm-deepseek@0.2.1-rc.2')
       expect(Object.keys(manifest.loadedSourceHashes)).not.toContain('llm-scripted@main')
       expect(seen).toEqual(Array(4).fill(key))
       const environment = await store.getEnvironment(runId)

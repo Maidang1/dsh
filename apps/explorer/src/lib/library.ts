@@ -96,6 +96,20 @@ export function scopeIdProblem(id: string, scopes: readonly ScopeDefinition[]): 
 }
 
 /**
+ * Why `sessionId` cannot join the session list of scope `scopeId`, or null when
+ * it can. Mirrors validateComposition in the runner: a session is listed by at
+ * most one scope (even a repeat within the same scope is refused there), and a
+ * session no scope lists lives in the root scope.
+ */
+export function scopeSessionProblem(sessionId: string, scopes: readonly ScopeDefinition[], scopeId: string): string | null {
+  if (!sessionId.trim()) return '会话 id 不能为空'
+  if (/\s/.test(sessionId)) return '会话 id 不能包含空白字符'
+  const owner = scopes.find(scope => scope.sessions?.includes(sessionId))
+  if (owner) return owner.id === scopeId ? `作用域 ${scopeId} 已列出会话 ${sessionId}` : `会话 ${sessionId} 已由作用域 ${owner.id} 列出`
+  return null
+}
+
+/**
  * Parse edited config text. Keys outside `configKeys` are named here so the
  * learner sees them before commit refuses the draft (CTX-04).
  */
@@ -122,12 +136,7 @@ export function scopeRemovalProblem(scopeId: string, composition: { scopes: read
   if (instances.length) return `仍有实例：${instances.join('、')}`
   const children = composition.scopes.filter(scope => scope.parentId === scopeId).map(scope => scope.id)
   if (children.length) return `仍有子作用域：${children.join('、')}`
-  const sessions = composition.instances.flatMap(instance => {
-    const scopes = (instance.config as { sessionScopes?: Record<string, unknown> } | null)?.sessionScopes
-    return scopes && typeof scopes === 'object'
-      ? Object.entries(scopes).filter(([, chain]) => Array.isArray(chain) && chain.includes(scopeId)).map(([session]) => `${instance.id} 的会话 ${session}`)
-      : []
-  })
-  if (sessions.length) return `仍被 sessionScopes 使用：${sessions.join('、')}`
+  const sessions = composition.scopes.find(scope => scope.id === scopeId)?.sessions ?? []
+  if (sessions.length) return `仍有会话：${sessions.join('、')}`
   return null
 }

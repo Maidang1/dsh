@@ -9,7 +9,7 @@
 ## 决定
 
 1. **Cordis 直接复用。** 依赖 npm 上的 `@deepseek-ai/cordis@4.0.5` 与 `@deepseek-ai/cosmokit@1.8.6`，精确锁定版本。两个包 tarball 中的 `src/` 与固定 commit 的 `vendor/cordis/src`、`vendor/cosmokit/src` 逐字节一致（`diff -r` 无输出）。插件配置 schema 同样复用 `@deepseek-ai/schemastery@3.18.5`（tarball `src/` 与 `vendor/schemastery/src` 逐字节一致），教学插件像上游服务一样声明 `Config`，由 Cordis 在 apply 前校验；它与 Cordis 一样在阶段打包时保持 external。
-2. **核心插件使用教学子集。** session、system-prompt、tools、agent、agent-loop、llm 在教学运行时中精简重写，运行在真实 Cordis 上。原因：
+2. **核心插件使用教学子集。**（状态：已被 [0002](0002-run-upstream-packages.md) 取代——npm 上的 `0.2.1-rc.2` 即固定 commit 的发布，第一条理由已消失；以下为原文。）session、system-prompt、tools、agent、agent-loop、llm 在教学运行时中精简重写，运行在真实 Cordis 上。原因：
    - npm 上的 `@deepseek-ai/dsh-*` 版本（如 `dsh-system-prompt@0.0.1-rc.1`、`dsh-agent-loop@0.1.0-rc.6`）不对应固定 commit，不能作为“固定 commit 的上游实现”；
    - 从源码构建上游需要 pnpm 11、原生模块与 typert 生成链，超出第一版的教学成本；
    - 教学子集以契约测试约束，并通过 SourceRef 指向固定 commit 的源码。

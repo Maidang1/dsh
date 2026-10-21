@@ -1,15 +1,15 @@
 /**
  * PROMPT-01..04 contracts (docs/05-validation-and-release.md §3, §4.0), run on
- * the teaching runtime over real Cordis 4.0.5.
+ * the upstream kernel: `@deepseek-ai/dsh-system-prompt` over Cordis 4.0.5.
  */
 import { TraceName } from '@harness-explorer/contracts'
 import type { PluginPhasePayload, RegistrationAddPayload } from '@harness-explorer/contracts'
 import { Context } from '@deepseek-ai/cordis'
 import type { Plugin } from '@deepseek-ai/cordis'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { describe, expect, it } from 'vitest'
-import SystemPrompt from '../../teaching-plugins/system-prompt/stages/main/index.ts'
 import { toPluginPhase } from '../src/fiber-phase.ts'
-import { finalView, lifecycleScenario, minimalChat, payloadOf, promptScopeScenario, recordsOf, requestsOf, run, scenario, scopedChat } from './helpers.ts'
+import { PERSONA, finalView, lifecycleScenario, minimalChat, payloadOf, promptScopeScenario, recordsOf, requestsOf, run, scenario, scopedChat } from './helpers.ts'
 
 const SECTION_TEXT = '回答时使用短句'
 const occurrences = (text: string, part: string) => text.split(part).length - 1
@@ -24,7 +24,7 @@ describe('PROMPT-01 and PROMPT-04: section registration and removal in one run',
 
   it('baseline request A has no contributed text', () => {
     const [a] = requestsOf(result, 'baseline')
-    expect(a?.system).toBe('你是一个助手')
+    expect(a?.system).toBe(PERSONA)
   })
 
   it('mounting registers one section owned by the instance and sends no request', () => {
@@ -41,9 +41,16 @@ describe('PROMPT-01 and PROMPT-04: section registration and removal in one run',
     expect(mount.some(record => record.name === TraceName.modelRequest)).toBe(false)
   })
 
+  it('attributes the built-in sections to the system-prompt instance', () => {
+    const builtIn = result.recorder.records
+      .filter(record => record.name === TraceName.registrationAdd && record.instanceId === 'system-prompt')
+      .map(record => payloadOf<RegistrationAddPayload>(result, record).name)
+    expect(builtIn).toEqual(['harness:identity', 'deployment:persona-prefix', 'deployment:persona-suffix'])
+  })
+
   it('request B contains the section exactly once, after the persona', () => {
     const [b] = requestsOf(result, 'with-section')
-    expect(b?.system).toBe(`你是一个助手\n\n${SECTION_TEXT}`)
+    expect(b?.system).toBe(`${PERSONA}\n\n${SECTION_TEXT}`)
     expect(occurrences(b!.system, SECTION_TEXT)).toBe(1)
   })
 
@@ -71,7 +78,7 @@ describe('PROMPT-01 and PROMPT-04: section registration and removal in one run',
   it('run settlement unloads every instance and leaves no registrations', () => {
     const view = finalView(result)
     expect(Object.values(view.registrations)).toEqual([])
-    expect(Object.values(view.plugins).map(plugin => plugin.phase)).toEqual(Array(7).fill(null))
+    expect(Object.values(view.plugins).map(plugin => plugin.phase)).toEqual(Array(minimalChat().instances.length).fill(null))
   })
 })
 
@@ -91,26 +98,23 @@ describe('PROMPT-02: duplicate name in one scope', () => {
     const phases = recordsOf(result, 'second')
       .filter(record => record.name === TraceName.pluginPhase && record.instanceId === 'prompt-contributor-2')
       .map(record => payloadOf<PluginPhasePayload>(result, record))
-    expect(phases.at(-1)).toMatchObject({
-      phase: 'failed',
-      error: { message: 'prompt section "lesson:style" is already registered' },
-    })
+    expect(phases.at(-1)?.phase).toBe('failed')
+    expect(phases.at(-1)?.error?.message).toMatch(/^prompt section "lesson:style" is already registered/)
     const added = result.recorder.records
       .filter(record => record.name === TraceName.registrationAdd)
       .filter(record => payloadOf<RegistrationAddPayload>(result, record).name === 'lesson:style')
     expect(added.map(record => record.instanceId)).toEqual(['prompt-contributor'])
-    expect(requestsOf(result, 'ask')[0]!.system).toBe(`你是一个助手\n\n${SECTION_TEXT}`)
+    expect(requestsOf(result, 'ask')[0]!.system).toBe(`${PERSONA}\n\n${SECTION_TEXT}`)
   })
 })
 
 describe('PROMPT-03: same name in a nested scope', () => {
-  it('shadows the outer section only for sessions assembled in that scope', async () => {
+  it('shadows the outer section only for sessions whose agent lives in that scope', async () => {
     const composition = minimalChat()
-    composition.scopes.push({ id: 'agent-b', parentId: 'root' })
+    composition.scopes.push({ id: 'agent-b', parentId: 'root', sessions: ['s-b'] })
     const contributor = composition.instances.find(instance => instance.id === 'prompt-contributor')!
     contributor.enabled = true
     composition.instances.push({ ...contributor, id: 'scoped-contributor', scopeId: 'agent-b', config: { text: '回答时使用英文' } })
-    composition.instances.find(instance => instance.id === 'agent-loop')!.config = { sessionScopes: { 's-b': ['root', 'agent-b'] } }
     const script = {
       id: 'scoped',
       onUnmatched: 'fail' as const,
@@ -125,8 +129,31 @@ describe('PROMPT-03: same name in a nested scope', () => {
       ], 'scoped'),
     })
     expect(result.error).toBeNull()
-    expect(requestsOf(result, 'root-session')[0]!.system).toBe(`你是一个助手\n\n${SECTION_TEXT}`)
-    expect(requestsOf(result, 'scoped-session')[0]!.system).toBe('你是一个助手\n\n回答时使用英文')
+    expect(requestsOf(result, 'root-session')[0]!.system).toBe(`${PERSONA}\n\n${SECTION_TEXT}`)
+    expect(requestsOf(result, 'scoped-session')[0]!.system).toBe(`${PERSONA}\n\n回答时使用英文`)
+    const scoped = result.recorder.records
+      .filter(record => record.name === TraceName.registrationAdd && record.instanceId === 'scoped-contributor')
+      .map(record => payloadOf<RegistrationAddPayload>(result, record))
+    expect(scoped.map(item => item.registrationId)).toEqual(['prompt-section:agent-b:lesson:style'])
+  })
+
+  it('chains a nested scope through its parent', async () => {
+    const composition = minimalChat()
+    composition.scopes.push({ id: 'team', parentId: 'root' }, { id: 'agent-c', parentId: 'team', sessions: ['s-c'] })
+    const contributor = composition.instances.find(instance => instance.id === 'prompt-contributor')!
+    composition.instances.push({ ...contributor, id: 'team-contributor', enabled: true, scopeId: 'team', config: { name: 'team:rule', text: '团队规则' } })
+    const script = { id: 'any', onUnmatched: 'fail' as const, rules: [{ id: 'any', match: {}, respond: { kind: 'text' as const, chunks: ['ok'] } }] }
+    const result = await run({
+      composition,
+      modelScripts: { any: script },
+      scenario: scenario([
+        { kind: 'input', id: 'nested', sessionId: 's-c', text: '你好' },
+        { kind: 'input', id: 'outside', sessionId: 's-root', text: '你好' },
+      ], 'any'),
+    })
+    expect(result.error).toBeNull()
+    expect(requestsOf(result, 'nested')[0]!.system).toBe(`${PERSONA}\n\n团队规则`)
+    expect(requestsOf(result, 'outside')[0]!.system).toBe(PERSONA)
   })
 })
 
@@ -159,8 +186,8 @@ describe('section order validity (docs/03 §7)', () => {
     } satisfies Plugin)
     await new Promise(resolve => setImmediate(resolve))
     expect(toPluginPhase(contributor.state)).toBe('failed')
-    const assembly = (root.get('systemPrompt') as SystemPrompt).assemble()
-    expect(assembly.sections.map(section => section.name)).toEqual(['deployment:persona'])
+    const assembly = await root.systemPrompt.assemble()
+    expect(assembly.sections.map(section => section.name)).not.toContain('lesson:bad')
   })
 })
 
@@ -168,7 +195,7 @@ describe('PROMPT-03 preset: fixtures/compositions/scoped-chat.json with the prom
   it('gives the root session the outer section and the agent-b session the nested one', async () => {
     const result = await run({ composition: scopedChat(), scenario: promptScopeScenario() })
     expect(result.error).toBeNull()
-    expect(requestsOf(result, 'root-session')[0]!.system).toBe(`你是一个助手\n\n${SECTION_TEXT}`)
-    expect(requestsOf(result, 'scoped-session')[0]!.system).toBe('你是一个助手\n\n回答时使用英文')
+    expect(requestsOf(result, 'root-session')[0]!.system).toBe(`${PERSONA}\n\n${SECTION_TEXT}`)
+    expect(requestsOf(result, 'scoped-session')[0]!.system).toBe(`${PERSONA}\n\n回答时使用英文`)
   })
 })

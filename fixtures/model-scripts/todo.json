@@ -1,0 +1,8 @@
+{
+  "id": "todo",
+  "onUnmatched": "fail",
+  "rules": [
+    { "id": "plan", "match": { "lastUserText": "帮我规划：读代码、写测试", "declaredTools": ["todo_write"] }, "respond": { "kind": "tool-call", "tool": "todo_write", "arguments": { "todos": [{ "content": "读代码", "status": "in_progress" }, { "content": "写测试", "status": "pending" }] } } },
+    { "id": "confirm", "match": { "afterToolResult": "Updated todo list: 1 pending, 1 in progress, 0 completed." }, "respond": { "kind": "text", "chunks": ["已记下两项任务，", "先从读代码开始。"] } }
+  ]
+}

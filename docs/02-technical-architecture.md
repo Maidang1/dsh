@@ -6,7 +6,7 @@
 
 采用 Node 承载实际执行、浏览器承载交互可视化的本地应用。原有“组合与源码 → 执行 → 轨迹 → 回放投影 → 可视化”的数据流保持不变，只改变执行位置与观测来源。
 
-插件实现分两种来源。被讲解的插件使用本项目的分阶段教学实现；其余基础插件（如 session、llm、agent-loop）在 P0-04 验证可行时直接复用固定 commit 的上游实现，否则使用经契约验证的教学子集。两类插件可以出现在同一组合中，但每个实例都标明来源：不把上游实现当作分阶段教学代码讲解，也不把教学实现称为上游原文。复用范围在阶段 0 固定，不能在内容制作中反复切换。
+插件实现分两种来源。对话内核（session、session-projection、system-prompt、tools、agent、agent-loop、llm 与 DeepSeek 适配器）直接执行 npm 发布的 `@deepseek-ai/dsh-*@0.2.1-rc.2`——固定 commit 的发布（[decisions/0002](decisions/0002-run-upstream-packages.md)），不复制不改写；被讲解的插件（prompt-contributor、tool-guard、calculator）与确定性模型适配器 llm-scripted 使用本项目的分阶段教学实现。两类插件可以出现在同一组合中，但每个实例都标明来源：不把上游实现当作分阶段教学代码讲解，也不把教学实现称为上游原文。复用范围在阶段 0 固定，不能在内容制作中反复切换。
 
 不把上游改写成一个任意定义的全局状态机。XState 只用于 Node 端的运行控制（校验、启动、停止、结算）；草稿和实验版本由 Node 实验仓库管理，阅读与回放状态由浏览器的 Zustand 保存。教学运行时保留各领域的状态与控制结构，UI 阶段只是对它们的可解释投影。
 
@@ -19,7 +19,7 @@ flowchart TD
     B --> C[Code Hike 展示数据]
     B --> X[可执行阶段模块与阶段定义]
     B --> A[架构索引与 SourceRef]
-    UP[固定 commit 的上游复用插件] --> R
+    UP[上游发布的内核包 npm @deepseek-ai/dsh-*] --> R
     X --> R[运行子进程 每次运行新建]
     U[浏览器 草稿与运行命令] --> N[本地 Node 控制服务]
     N -->|revision 与场景| R
@@ -33,7 +33,7 @@ flowchart TD
     C --> V
 ```
 
-构建产物必须带同一个 sourceHash。上游复用插件以 upstreamCommit 和包内容哈希标识。控制服务在启动运行前检查阶段源码、展示数据和执行模块是否匹配，不匹配则拒绝执行。
+构建产物必须带同一个 sourceHash。上游内核包以 upstreamCommit 和包入口内容哈希标识。控制服务在启动运行前检查阶段源码、展示数据和执行模块是否匹配，不匹配则拒绝执行。
 
 ## 3 技术选型
 
@@ -66,9 +66,8 @@ apps/
   local-server/               # Node 启动入口、前端托管、本地 API、运行仓库、运行子进程管理
 packages/
   contracts/                  # 公共 DTO、Zod schemas、阶段定义、场景、事件与源码引用类型
-  teaching-runtime/           # 教学执行语义，不依赖 React
-  teaching-plugins/           # 精简插件及各可运行阶段
-  upstream-bridge/            # 上游复用插件的加载与观测适配（P0-04 决定复用时建立）
+  teaching-runtime/           # 场景执行器、观测适配、确定性设施，不依赖 React
+  teaching-plugins/           # 上游内核阶段定义（src/upstream.ts）与教学插件各可运行阶段
   trace/                      # 记录格式、纯投影、检查点、差异
   lesson-kit/                 # 内容校验、源码提取、阶段构建、manifest
 content/
@@ -88,7 +87,7 @@ docs/
 .explorer/                    # 本地运行仓库，运行时生成，不提交
 ```
 
-依赖方向：contracts 被其他包使用；runtime 不导入 UI、MDX 或内容解释，只读取构建生成的 ExecutableStageDefinition；trace 依赖 contracts，运行时和 upstream-bridge 通过窄 recorder 接口写入 trace；lesson-kit 消费插件源码和内容并生成阶段定义，不被运行器反向调用。
+依赖方向：contracts 被其他包使用；runtime 不导入 UI、MDX 或内容解释，只读取构建生成的 ExecutableStageDefinition；trace 依赖 contracts，运行时与观测适配通过窄 recorder 接口写入 trace；lesson-kit 消费插件源码和内容并生成阶段定义，不被运行器反向调用。
 
 本地 Node 服务属于同一个应用，不引入远程后端、数据库服务或插件市场。实验仓库操作和运行命令通过本地 HTTP API 发送，轨迹经 SSE 订阅；控制服务与运行子进程通过 IPC 交换同一套协议消息。
 
@@ -339,11 +338,11 @@ RUN 必须绑定已经校验的不可变 revision。运行中编辑只修改草�
 
 草稿由浏览器编辑，保存到 Node 实验仓库。多个标签页编辑同一草稿时，以草稿版本号做乐观并发控制，冲突时提示，不静默覆盖。提交草稿时，Node 执行 compileComposition，通过后计算 revisionHash，生成不可变 revision。
 
-compileComposition 的检查项包括：定义和可执行阶段是否存在、配置合法、父子树无环、实例 ID 唯一、作用域可见性、必需服务（依据 ExecutableStageDefinition.requires 与 provides）、同域冲突、场景引用的实例是否存在，以及当前教学实现不支持的特性。
+compileComposition 的检查项包括：定义和可执行阶段是否存在、配置合法、父子树无环、实例 ID 唯一、作用域可见性、必需服务（依据 ExecutableStageDefinition.requires 与 provides）、同域冲突、场景引用的实例是否存在、被两个作用域同时认领的会话，以及实例作用域不在父实例作用域链内。
 
 依赖图与树分开生成。依赖可能是动态注册，不能声称静态分析能发现所有关系。图边标注 declared、resolved 或 observed，分别表示声明、实际解析和实际调用。
 
-最小对话组合候选包括 session、system-prompt、tools、agent、agent-loop、llm 和确定性适配器，但只是待验证清单。是否需要投影等附加服务，由实际实现与契约确认。没有使用工具不意味着一定可以移除工具服务，因为 Loop 可能依赖其接口。
+最小对话组合为 session、session-projection、system-prompt、tools、llm 加模型适配器、agent、agent-loop（上游 sdk-minimal 的对话内核，依赖声明见 [decisions/0001](decisions/0001-upstream-baseline-and-reuse.md)，实际运行见 `fixtures/compositions/minimal-chat.json`）。没有使用工具不意味着一定可以移除工具服务，因为 Loop 依赖其接口。
 
 第一版只编辑显式教学组合 JSON。Profile/Bundle/Patch 的完整覆盖规则作为后续实验；不把简单配置对象合并宣称为上游 Patch 语义。
 
@@ -351,13 +350,13 @@ compileComposition 的检查项包括：定义和可执行阶段是否存在、�
 
 运行时接口最小包括 mount、unmount、startScenario、cancel、dispose。它加载可执行阶段模块，并通过服务与事件机制执行；场景中的 mount、unmount 步骤调用同一组接口。
 
-推荐的教学实现顺序：Context/作用域 → 服务依赖 → 注册资源与释放 → 事件分发 → Session → 提示词 → 工具 → Agent Loop → 模型适配。
+教学插件（被讲解的插件与确定性适配器）的开发顺序：Context/作用域 → 服务依赖 → 注册资源与释放 → 事件分发 → 与内核服务（提示词、工具、模型）交互。
 
 精简不是按包大小裁剪。每个删减必须列出被排除的行为；不支持的输入或配置显式拒绝，不静默使用不同语义。
 
 waterfall 必须保留 around-middleware 语义：外层进入、next 委托、内层返回、外层返回。不能实现成将值逐个传递的数组 reduce。同步/异步和返回规则按具体事件契约确定，不统一为一种 Promise 广播。
 
-上游复用插件不修改源码，由 upstream-bridge 的观测适配在 Cordis 边界记录：实例生命周期、服务解析、事件分发的进入与返回、Session 持久事件和模型请求。观测适配只读取并序列化快照，不改变调用顺序或返回值；OBS-01 契约验证开启与关闭观测时的规范化结果一致。上游插件内部没有教学检查点，相关记录的 SourceRef 指向上游文件和符号，界面不为它们提供 Code Hike 阶段。P0-04 若证明无法在不改变语义的前提下观测，该插件改用教学子集。
+上游内核包不修改源码，由教学运行时的观测适配（`packages/teaching-runtime/src/observe.ts`）在 Cordis 边界记录：实例生命周期、服务解析、事件分发的进入与返回、Session 持久事件和模型请求。观测适配只读取并序列化快照，不改变调用顺序或返回值（它加入的唯一 waterfall 是逐块透传的 `llm/stream` 监听器）；OBS-01 契约验证开启与关闭观测时的规范化结果一致。上游插件内部没有教学检查点，相关记录的 SourceRef 指向上游文件和符号，界面不为它们提供 Code Hike 阶段。
 
 确定性模型不是直接播放最终轨迹。模型适配器按 ModelScript 匹配实际请求，产出流或工具调用；其余事件、日志和状态仍由运行时代码生成。请求没有匹配的规则时场景失败，让错误实现暴露出来。
 

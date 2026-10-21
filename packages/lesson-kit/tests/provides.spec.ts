@@ -30,13 +30,13 @@ describe('provides check', () => {
 
   it('reports undeclared and missing services', async () => {
     const stages = devStages.map(stage => {
-      if (stage.id === 'session@main') return { ...stage, provides: [] }
-      if (stage.id === 'llm@main') return { ...stage, provides: ['llm', 'embeddings'] }
+      if (stage.id === 'session@0.2.1-rc.2') return { ...stage, provides: [] }
+      if (stage.id === 'llm@0.2.1-rc.2') return { ...stage, provides: ['llm', 'embeddings'] }
       return stage
     })
     expect(await mismatches(stages)).toEqual([
-      'session (session@main) provides [sessions] but the catalog lists []',
-      'llm (llm@main) provides [llm] but the catalog lists [embeddings, llm]',
+      'session (session@0.2.1-rc.2) provides [sessions] but the catalog lists []',
+      'llm (llm@0.2.1-rc.2) provides [llm] but the catalog lists [embeddings, llm]',
     ])
   })
 })

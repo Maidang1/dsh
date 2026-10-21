@@ -200,3 +200,28 @@ describe('experiment API and HOST-01 reconnection', () => {
     expect(events.some(event => event.event === 'state' && event.data.runId === runId)).toBe(true)
   })
 })
+
+describe('package installs disabled (store outside the repository)', () => {
+  it('answers 409 with the reason on install and uninstall; reads keep working', async () => {
+    const main = server
+    const reason = 'package installs are disabled: the store is outside the repository'
+    server = await startServer({ store: new RunStore(root), catalog: loadDevCatalog(), controller, packagesDisabled: reason })
+    try {
+      const exchange = await raw(new URL(server.launchUrl).pathname + new URL(server.launchUrl).search)
+      expect(exchange.status).toBe(302)
+      const session = String(exchange.headers['set-cookie']).split(';')[0]!
+      const writeHeaders = { cookie: session, origin: server.origin }
+
+      const install = await raw('/api/packages', { method: 'POST', headers: writeHeaders, body: { name: '@deepseek-ai/dsh-tool-x' } })
+      expect(install.status).toBe(409)
+      expect(install.body).toContain(reason)
+      const remove = await raw('/api/packages/@deepseek-ai%2Fdsh-tool-x', { method: 'DELETE', headers: writeHeaders })
+      expect(remove.status).toBe(409)
+      expect(remove.body).toContain(reason)
+      expect((await raw('/api/packages', { headers: { cookie: session } })).status).toBe(200)
+    } finally {
+      await server.close()
+      server = main
+    }
+  })
+})

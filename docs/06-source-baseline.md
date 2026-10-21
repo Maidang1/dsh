@@ -6,7 +6,7 @@
 
 学习对象：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)。本方案固定参考 commit：[`687f282e8625c6b8d11ff58211a90524be2e4317`](https://github.com/deepseek-ai/deepseek-harness/commit/687f282e8625c6b8d11ff58211a90524be2e4317)。该 commit 的提交日期为 2026-10-17；文档整理日期为 2026-10-18。
 
-此处区分三类信息：已阅读核查的上游事实、本项目设计决定、实施阶段仍需验证的细节。当前交付是计划文档，没有运行上游或完成行为一致性验证。
+此处区分三类信息：已阅读核查的上游事实、本项目设计决定、实施阶段仍需验证的细节。当前交付直接运行上游发布的内核包（decisions/0002），覆盖范围内的行为一致性由契约测试约束；上游参考执行器与差分测试仍未建立。
 
 ## 2 已核查的上游机制
 
@@ -72,7 +72,7 @@ waterfall 是 around-middleware，监听器通过 next 委托，可以不调用 
 | 项目 | 为什么需要验证 | 负责阶段 | 当前结果 |
 |---|---|---|---|
 | 最小对话插件依赖闭包 | 不能从概念图推出实际最少组合 | P0-01 | 依赖声明已核实（decisions/0001） |
-| Cordis 与上游插件的 Node 复用 | 需验证固定版本的加载方式与依赖 | P0-04 | Cordis 直接复用；插件改为教学子集（decisions/0001） |
+| Cordis 与上游插件的 Node 复用 | 需验证固定版本的加载方式与依赖 | P0-04 | Cordis 直接复用；内核插件直接运行 npm 发布包 `0.2.1-rc.2`（decisions/0002） |
 | 上游复用插件的观测适配 | 需在不改源码、不改语义的前提下记录生命周期、服务解析、事件分发与 Session 事件 | P0-04 | 观测基于 Cordis 内部事件，OBS-01 已验证 |
 | 前端托管方式 | Next.js 静态导出能否由 Node 同源托管并满足 Code Hike/MDX；否则改用 custom server | P0-03 | 静态导出 + local-server 同源托管 |
 | 真实模型提供方与凭据变量 | 依据上游 llm 插件实际支持的提供方确定 | P0-01、P2-06 | DeepSeek Messages 接口，DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL（REAL-01，仅对模拟服务验证） |
@@ -84,7 +84,7 @@ waterfall 是 around-middleware，监听器通过 next 委托，可以不调用 
 | 上游差分执行环境 | 需要固定依赖和可重复的参考夹具 | P5-04 | 未完成：未建立上游参考执行器，课程等级为 contract-verified |
 | 动态代码动画的具体 API | 依赖所选 Code Hike 版本 | P0-03、P4-01 | codehike 1.1.0：highlight、Pre、token-transitions |
 
-执行位置已调整为本地 Node，原有插件树、代码教学、轨迹、回放和数据对比保持不变；基础插件计划复用上游、被讲解插件使用教学实现。这是本项目设计决定，尚不表示已运行上游、证明全部插件可直接复用或可观测，或完成真实环境集成。
+执行位置已调整为本地 Node，原有插件树、代码教学、轨迹、回放和数据对比保持不变；内核插件运行上游发布包，被讲解插件使用教学实现。真实模型仅对本地模拟服务验证（REAL-01），未对真实 DeepSeek 服务验证。
 
 ## 5 基线升级流程
 

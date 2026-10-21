@@ -43,10 +43,32 @@ describe('run comparison', () => {
     expect(processLines(section).join('\n')).not.toMatch(/#\d+/)
   })
 
-  it('session: only the sessions asked while the section is registered persist a different system message', () => {
+  it('session: only the sessions asked while the section is registered change, assistant messages included', () => {
     const changed = diffLines(sessionLines(entry).join('\n'), sessionLines(section).join('\n')).filter(line => line.kind !== 'same')
     const sessions = new Set(changed.map(line => line.text.split(' · ')[0]))
     expect([...sessions].sort()).toEqual(['s-b', 's-d'])
-    expect(changed).toContainEqual({ kind: 'added', text: 's-b · system/message {"text":"你是一个助手\\n\\n回答时使用短句"}' })
+    expect(changed).toContainEqual({ kind: 'added', text: expect.stringContaining('你是一个助手\\n\\n回答时使用短句') })
+    // The short-sentence section changes the scripted reply itself, so that content change must surface.
+    const addedAssistant = changed.filter(line => line.kind === 'added' && line.text.includes('assistant/message'))
+    expect(addedAssistant.length).toBe(2)
+    expect(addedAssistant.every(line => line.text.includes('你好。'))).toBe(true)
+  })
+
+  it('session: stream timestamps differ between the runs but produce no false differences', () => {
+    // Precondition: the recorded assistant streams really carry different wall-clock
+    // stamps (time/time0), so an unstripped comparison would report them.
+    const streamTimes = (trace: Trace) =>
+      trace.records
+        .filter(record => record.name === 'session/event')
+        .map(record => trace.payloads[record.payloadRef!] as { type: string; data: { stream?: Array<Record<string, number>> } } | undefined)
+        .filter(event => event?.type === 'assistant/message')
+        .flatMap(event => event!.data.stream!.flatMap(record => [record.time, record.time0].filter((value): value is number => value !== undefined)))
+    expect(streamTimes(entry).length).toBeGreaterThan(0)
+    expect(streamTimes(entry)).not.toEqual(streamTimes(section))
+    // Sessions the section never touched compare equal, assistant messages and ids included.
+    const changed = diffLines(sessionLines(entry).join('\n'), sessionLines(section).join('\n')).filter(line => line.kind !== 'same')
+    expect(changed.filter(line => line.text.startsWith('s-a ·') || line.text.startsWith('s-c ·'))).toEqual([])
+    expect(sessionLines(entry).some(line => line.includes('assistant/message'))).toBe(true)
+    expect(sessionLines(entry).join('\n')).not.toMatch(/"time0?"|"dt"/)
   })
 })

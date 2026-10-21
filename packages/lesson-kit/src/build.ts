@@ -18,7 +18,7 @@ export class LessonBuildError extends Error {
 
 export interface BuildOptions {
   repoRoot: string
-  /** Stages to build; `module` points at the stage entry source. */
+  /** Stages to build; `module` points at the stage entry source. Upstream stages run as published and are skipped. */
   stages: readonly ExecutableStageDefinition[]
   contentDir: string
   outDir: string
@@ -40,7 +40,8 @@ async function buildStage(stage: ExecutableStageDefinition, options: BuildOption
     format: 'esm',
     platform: 'node',
     target: 'node22',
-    external: ['@deepseek-ai/cordis', '@deepseek-ai/schemastery'],
+    // Upstream packages stay external: a stage and the kernel must share one Cordis and one copy of each service.
+    external: ['@deepseek-ai/*'],
     metafile: true,
     sourcemap: 'linked',
     logLevel: 'silent',
@@ -181,7 +182,7 @@ async function buildLesson(dir: string, options: BuildOptions, stages: ReadonlyM
 
 export async function buildLessons(options: BuildOptions): Promise<LessonBuild> {
   const stages = new Map<string, BuiltStage>()
-  for (const stage of options.stages) stages.set(stage.id, await buildStage(stage, options))
+  for (const stage of options.stages.filter(item => item.origin === 'teaching')) stages.set(stage.id, await buildStage(stage, options))
 
   const lessons: BuiltLesson[] = []
   if (existsSync(options.contentDir)) {
