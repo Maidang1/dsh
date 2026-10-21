@@ -18,6 +18,7 @@ import type { Layer } from '@/lib/store'
 import { phaseOf } from '@/lib/phase'
 import { LAYER_META, assignLayers, flowStepsByInstance } from '@/lib/dataflow'
 import type { RequestFlow } from '@/lib/dataflow'
+import { scopeBoxes } from '@/lib/scope-boxes'
 
 export { PHASE_LABEL, phaseOf } from '@/lib/phase'
 
@@ -31,6 +32,7 @@ type PluginNodeData = {
   flowCurrent: boolean
   lessonStages: number | null
   openLesson: (() => void) | null
+  select: () => void
   [key: string]: unknown
 }
 
@@ -39,15 +41,17 @@ function PluginNode({ data }: NodeProps<Node<PluginNodeData>>) {
   return (
     <div
       className={`plugin-node phase-${String(data.plugin?.phase ?? 'none')}${data.selected ? ' is-selected' : ''}${data.flowCurrent ? ' is-flow-current' : ''}`}
-      // Keyboard entry to the lesson; selection stays on the React Flow node click.
-      // No aria-label: the accessible name comes from the card's visible text.
+      // Enter/Space select like a click; Enter on the selected node opens its
+      // lesson (the hint's ↵). No aria-label: the accessible name comes from
+      // the card's visible text.
       tabIndex={0}
       role="button"
       onKeyDown={(event) => {
-        if (event.key === 'Enter' && data.openLesson) {
-          event.stopPropagation()
-          data.openLesson()
-        }
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        event.stopPropagation()
+        if (event.key === 'Enter' && data.selected && data.openLesson) data.openLesson()
+        else data.select()
       }}
     >
       {data.isNew ? <span className="plugin-node__new">+ 新增</span> : null}
@@ -237,43 +241,40 @@ const MIN_CANVAS_W = 1240
 const FIT_PADDING = { top: '56px', bottom: '100px', left: '12px', right: '12px' } as const
 
 /** Bottom clearance under the floating replay bar, measured so wrapped/tall bars never cover the graph. */
-function useReplayBarClearance() {
+function useReplayBarClearance(bar: HTMLDivElement | null) {
   const [clearance, setClearance] = useState(100)
   useEffect(() => {
-    const bar = document.querySelector('.replay-bar')
     if (!bar) return
     const update = () => setClearance(Math.max(100, Math.round(bar.getBoundingClientRect().height) + 20))
     update()
     const observer = new ResizeObserver(update)
     observer.observe(bar)
     return () => observer.disconnect()
-  }, [])
+  }, [bar])
   return clearance
 }
 
 /** Refit the canvas when its container resizes (panel open/close, window changes). */
-function FitOnResize({ bottom }: { bottom: number }) {
+function FitOnResize({ bottom, tree }: { bottom: number; tree: HTMLDivElement | null }) {
   const flow = useReactFlow()
   useEffect(() => {
-    const element = document.querySelector('.tree')
-    if (!element) return
+    if (!tree) return
     const refit = () => void flow.fitView({ padding: { ...FIT_PADDING, bottom: `${bottom}px` }, maxZoom: 1 })
     const observer = new ResizeObserver(refit)
-    observer.observe(element)
+    observer.observe(tree)
     refit()
     return () => observer.disconnect()
-  }, [flow, bottom])
+  }, [flow, bottom, tree])
   return null
 }
 
 /** The trace drawer covers the canvas bottom; refit so the graph stays fully visible. */
-function FitForDrawer({ open, bottom }: { open: boolean; bottom: number }) {
+function FitForDrawer({ open, bottom, tree }: { open: boolean; bottom: number; tree: HTMLDivElement | null }) {
   const flow = useReactFlow()
   useEffect(() => {
-    const element = document.querySelector('.tree')
-    const clearance = open && element ? Math.max(bottom, Math.min(346, element.clientHeight * 0.45) + 116) : bottom
+    const clearance = open && tree ? Math.max(bottom, Math.min(346, tree.clientHeight * 0.45) + 116) : bottom
     void flow.fitView({ padding: { ...FIT_PADDING, bottom: `${Math.round(clearance)}px` }, maxZoom: 1, duration: 200 })
-  }, [flow, open, bottom])
+  }, [flow, open, bottom, tree])
   return null
 }
 
@@ -300,12 +301,17 @@ interface Props {
   selectedInstanceId: string | null
   /** The trace drawer floats over the canvas bottom; the graph refits around it. */
   drawerOpen?: boolean
+  /** Elements owned by the Workbench: the canvas container and the replay bar
+      floating over it (no document.querySelector). */
+  treeElement: HTMLDivElement | null
+  replayBarElement: HTMLDivElement | null
+  onTreeElement(element: HTMLDivElement | null): void
   onSelect(id: string | null): void
   onOpenLesson(instance: PluginInstance): void
 }
 
-export function PluginTree({ composition, stages, catalogLayers, snapshot, layer, flow, addedIds, lessons, selectedInstanceId, drawerOpen = false, onSelect, onOpenLesson }: Props) {
-  const barClearance = useReplayBarClearance()
+export function PluginTree({ composition, stages, catalogLayers, snapshot, layer, flow, addedIds, lessons, selectedInstanceId, drawerOpen = false, treeElement, replayBarElement, onTreeElement, onSelect, onOpenLesson }: Props) {
+  const barClearance = useReplayBarClearance(replayBarElement)
   const { nodes, edges } = useMemo(() => {
     const stageById = new Map(stages.map(stage => [stage.id, stage]))
     const layers = assignLayers(composition.instances, stages, catalogLayers)
@@ -333,7 +339,10 @@ export function PluginTree({ composition, stages, catalogLayers, snapshot, layer
     nodes.push({ id: 'root', type: 'root', position: { x: canvasW / 2 - 60, y: bandTop + 40 }, data: {}, selectable: false, draggable: false })
     bandTop += l0Height
     for (const meta of LAYER_META.slice(1)) {
-      const members = byLayer.get(meta.layer) ?? []
+      // Same-scope members sit in adjacent columns so a scope container only
+      // ever wraps its own members (see scopeBoxes).
+      const members = [...byLayer.get(meta.layer) ?? []]
+        .sort((a, b) => (a.scopeId === 'root' ? 0 : 1) - (b.scopeId === 'root' ? 0 : 1) || a.scopeId.localeCompare(b.scopeId))
       const cols = maxColsFor(canvasW)
       const baseHeight = Math.max(Math.ceil(Math.max(members.length, 1) / cols) * ROW_H + BAND_PAD_TOP + BAND_PAD_BOTTOM, 96)
       // Reserve badge room only for bands that actually hold badges (data view).
@@ -362,32 +371,39 @@ export function PluginTree({ composition, stages, catalogLayers, snapshot, layer
             flowCurrent: flow?.highlighted.includes(instance.id) ?? false,
             lessonStages: lessonStagesOf(instance),
             openLesson: lessonStagesOf(instance) !== null ? () => onOpenLesson(instance) : null,
+            select: () => onSelect(instance.id),
           } satisfies PluginNodeData,
         })
       })
       bandTop += height
     }
 
-    // Non-root scopes as dashed containers around their members (§2.3).
-    for (const scope of composition.scopes) {
-      if (scope.id === 'root') continue
-      const members = composition.instances.filter(instance => instance.scopeId === scope.id && positions.has(instance.id))
-      if (!members.length) continue
-      const xs = members.map(item => positions.get(item.id)!.x)
-      const ys = members.map(item => positions.get(item.id)!.y)
-      const left = Math.min(...xs) - 12
-      const top = Math.min(...ys) - 34
+    // Non-root scopes as dashed containers around their members (§2.3): one
+    // box per (scope, layer, row run), so a scope spread over layers no longer
+    // spans the bands between and covers unrelated root-scope nodes.
+    scopeBoxes({
+      scopes: composition.scopes,
+      instances: composition.instances,
+      positions,
+      layers,
+      nodeWidth: NODE_W,
+      nodeHeight: NODE_H,
+      columnGap: GAP_X,
+      padX: 12,
+      padTop: 34,
+      padBottom: 26,
+    }).forEach((box, index) => {
       nodes.push({
-        id: `scope:${scope.id}`,
+        id: `scope:${box.scopeId}:${box.layer}:${index}`,
         type: 'scope',
-        position: { x: left, y: top },
-        data: { label: scope.id, parent: scope.parentId },
-        style: { width: Math.max(...xs) - left + NODE_W + 4, height: Math.max(...ys) - top + 110, zIndex: -1 },
+        position: { x: box.x, y: box.y },
+        data: { label: box.scopeId, parent: box.parentId },
+        style: { width: box.width, height: box.height, zIndex: -1 },
         selectable: false,
         draggable: false,
         className: 'scope-node',
       })
-    }
+    })
 
     // Flow badges hang below their node, stacked tightly, so they never drift
     // over the canvas tools; several window records merge into one badge
@@ -518,10 +534,10 @@ export function PluginTree({ composition, stages, catalogLayers, snapshot, layer
       }
     }
     return { nodes, edges }
-  }, [composition, stages, catalogLayers, snapshot, layer, flow, addedIds, lessons, selectedInstanceId, onOpenLesson])
+  }, [composition, stages, catalogLayers, snapshot, layer, flow, addedIds, lessons, selectedInstanceId, onSelect, onOpenLesson])
 
   return (
-    <div className="tree" aria-label="插件树">
+    <div className="tree" ref={onTreeElement} aria-label="插件树">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -544,8 +560,8 @@ export function PluginTree({ composition, stages, catalogLayers, snapshot, layer
       >
         <Background gap={24} />
         <Controls showInteractive={false} position="top-left" />
-        <FitOnResize bottom={barClearance} />
-        <FitForDrawer open={drawerOpen} bottom={barClearance} />
+        <FitOnResize bottom={barClearance} tree={treeElement} />
+        <FitForDrawer open={drawerOpen} bottom={barClearance} tree={treeElement} />
       </ReactFlow>
     </div>
   )
@@ -605,6 +621,7 @@ export function PluginList({ composition, stages, catalogLayers, snapshot, flow,
                       <span className="plugin-list__dot" aria-hidden />
                       <span className="plugin-list__text">
                         <span className="plugin-list__id">{instance.id}</span>
+                        {instance.scopeId !== 'root' ? <span className="plugin-list__scope">作用域 {instance.scopeId}</span> : null}
                         <span className="plugin-list__sub">{subtitleOf(instance, stageById)}</span>
                       </span>
                       {steps.length ? (

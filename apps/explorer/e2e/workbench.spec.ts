@@ -89,6 +89,15 @@ test('lists the lifecycle history of an instance and jumps to a transition', asy
   await page.getByRole('button', { name: '图', exact: true }).click()
 })
 
+test('selects a canvas node from the keyboard', async () => {
+  // The previous test left the graph view showing the completed run.
+  const node = page.locator('.plugin-node', { hasText: 'agent-loop' })
+  await node.focus()
+  await page.keyboard.press('Space')
+  const summary = page.getByRole('complementary', { name: '实例摘要' })
+  await expect(summary.getByRole('heading', { name: 'agent-loop' })).toBeVisible()
+})
+
 test('compares the request before and after the contributor is mounted', async () => {
   await page.getByRole('tab', { name: '对比' }).click()
   await page.getByLabel('请求 A').selectOption({ index: 0 })

@@ -52,11 +52,13 @@ interface Props {
   traceOpen: boolean
   /** `请求 #N` / `初始挂载`, shown in the narrow mini bar next to 步骤 x/y (§4). */
   requestTitle?: string | null
+  /** The Workbench owns the bar element; the tree canvas measures it for bottom clearance. */
+  barRef?: (element: HTMLDivElement | null) => void
   onCursor(seq: number | null): void
   onToggleTrace(): void
 }
 
-export function ReplayBar({ data, seq, lastSeq, traceOpen, requestTitle = null, onCursor, onToggleTrace }: Props) {
+export function ReplayBar({ data, seq, lastSeq, traceOpen, requestTitle = null, barRef, onCursor, onToggleTrace }: Props) {
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState(1)
   const records = data?.records ?? []
@@ -75,7 +77,7 @@ export function ReplayBar({ data, seq, lastSeq, traceOpen, requestTitle = null, 
 
   if (!data) {
     return (
-      <div className="replay-bar">
+      <div className="replay-bar" ref={barRef}>
         <span className="muted">还没有运行。点击「运行教学代码」。</span>
       </div>
     )
@@ -97,7 +99,7 @@ export function ReplayBar({ data, seq, lastSeq, traceOpen, requestTitle = null, 
   const currentSegment = segments.findIndex(segment => seq >= segment.seq && seq <= segment.endSeq)
 
   return (
-    <div className="replay-bar" title="回放只移动游标，不重新执行">
+    <div className="replay-bar" ref={barRef} title="回放只移动游标，不重新执行">
       <span className="sr-only">回放只移动游标，不重新执行。</span>
       <button type="button" className="replay-bar__play" onClick={togglePlayback} aria-pressed={playing} aria-label={playing ? '暂停回放' : '播放回放'}>
         {playing ? '⏸' : '▶'}

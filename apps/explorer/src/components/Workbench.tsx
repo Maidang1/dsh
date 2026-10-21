@@ -48,6 +48,10 @@ export function Workbench() {
   const [panelTab, setPanelTab] = useState<PanelTab>('flow')
   const [traceOpen, setTraceOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
+  // The workbench owns the canvas container and the replay bar elements; the
+  // tree measures them through these refs instead of document.querySelector.
+  const [treeElement, setTreeElement] = useState<HTMLDivElement | null>(null)
+  const [replayBarElement, setReplayBarElement] = useState<HTMLDivElement | null>(null)
   useEffect(() => { void useExplorer.getState().init() }, [])
   // Narrow screens start on the layer-grouped list view (§4); once, at mount.
   useEffect(() => {
@@ -275,6 +279,9 @@ export function Workbench() {
                 lessons={state.lessons}
                 selectedInstanceId={state.selectedInstanceId}
                 drawerOpen={traceOpen}
+                treeElement={treeElement}
+                replayBarElement={replayBarElement}
+                onTreeElement={setTreeElement}
                 onSelect={select}
                 onOpenLesson={openLesson}
               />
@@ -306,6 +313,7 @@ export function Workbench() {
               following={state.cursor === null}
               lessons={state.lessons}
               composition={composition}
+              selectedInstanceId={state.selectedInstanceId}
               onCursor={state.setCursor}
               onSelectInstance={select}
             />
@@ -363,6 +371,7 @@ export function Workbench() {
         lastSeq={replay.lastSeq}
         traceOpen={traceOpen}
         requestTitle={flow?.title ?? null}
+        barRef={setReplayBarElement}
         onCursor={state.setCursor}
         onToggleTrace={() => setTraceOpen(!traceOpen)}
       />

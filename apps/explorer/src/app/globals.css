@@ -352,6 +352,7 @@ label { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; co
 .plugin-list__row.is-flowing .plugin-list__dot { background: var(--accent); }
 .plugin-list__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .plugin-list__id { font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plugin-list__scope { align-self: flex-start; padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-3); font-family: var(--font-mono); font-size: 9.5px; }
 .plugin-list__sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .plugin-list__flow { flex: none; padding: 1px 6px; border-radius: 4px; background: var(--accent); color: var(--accent-text); font-family: var(--font-mono); font-size: 10px; font-weight: 700; }
 .plugin-list__chevron { flex: none; color: var(--text-3); font-size: 14px; }
@@ -430,9 +431,13 @@ label { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; co
 .lesson__stage-pos { color: var(--text-2); font-size: 12px; white-space: nowrap; }
 .lesson__treebar { grid-row: 2; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; min-height: 44px; padding: 4px 20px; border-bottom: 1px solid var(--border); background: var(--surface); font-size: 12px; }
 .lesson__treebar-label { flex: none; }
+.lesson__chains { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .lesson__chain { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; list-style: none; margin: 0; padding: 0; min-width: 0; }
 .lesson__chain li { display: inline-flex; gap: 6px; align-items: center; }
 .lesson__chain-rel { color: var(--text-2); font-size: 11px; white-space: nowrap; }
+/* 被读取 links are inferred from declared dependencies, not observed in the trace.
+   Same text color as the other connectors (contrast), told apart by the dashed underline. */
+.lesson__chain-rel--inferred { border-bottom: 1px dashed var(--text-3); }
 .lesson__chain-node { padding: 2px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); color: var(--text-2); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
 .lesson__chain-node.is-self { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .lesson > .banner--warning { grid-row: 3; }

@@ -143,6 +143,32 @@ describe('request flow', () => {
     expect(beforeMount.edges.some(edge => edge.id.includes('lesson:style'))).toBe(false)
   })
 
+  it('maps tool registrations to the tools provider and draws no edge for listeners', () => {
+    const payloads: Record<string, JsonValue> = {}
+    let seq = 0
+    const rec = (kind: TraceRecord['kind'], name: string, extra: Partial<TraceRecord> & { payload?: JsonValue } = {}): TraceRecord => {
+      const { payload, ...rest } = extra
+      const record: TraceRecord = { schemaVersion: 1, runId: 'run-reg', seq, logicalTime: seq, kind, name, sourceRefIds: [], ...rest }
+      if (payload !== undefined) {
+        record.payloadRef = `p${seq}`
+        payloads[record.payloadRef] = payload
+      }
+      seq++
+      return record
+    }
+    const records: TraceRecord[] = [
+      rec('data', 'registration/add', { instanceId: 'prompt-contributor', payload: { registrationId: 'tool:root:contrib:calc', kind: 'tool', name: 'calculator', scopeId: 'root', detail: {} } }),
+      rec('data', 'registration/add', { instanceId: 'prompt-contributor', payload: { registrationId: 'listener:root:contrib:log', kind: 'listener', name: 'logger', scopeId: 'root', detail: {} } }),
+      rec('checkpoint', 'scenario/step', { payload: { kind: 'input', id: 'in', sessionId: 's-a', text: 'hi' }, scenarioStepId: 'in' }),
+      rec('checkpoint', 'run/settle', { payload: { outcome: 'completed' } }),
+    ]
+    const data: RunData = { runId: 'run-reg', records, payloads, gaps: [], settled: null, revision: null, loadedSourceHashes: null }
+    const flow = flowAt(data, 2)!
+    expect(flow.edges.find(edge => edge.id.includes('contrib:calc'))).toMatchObject({ source: 'prompt-contributor', target: 'tools', label: 'registration · calculator' })
+    // A listener registration has no provider to point at: no edge at all.
+    expect(flow.edges.some(edge => edge.id.includes('contrib:log'))).toBe(false)
+  })
+
   it('draws the request edge initiator → llm with the packet only while the call is current', () => {
     const flow = flowAt(makeTrace(), 10)!
     const request = flow.edges.find(edge => edge.label === 'llm/request')
@@ -303,6 +329,42 @@ describe('system paragraph comparison', () => {
       { text: '回答时使用短句', added: true, source: { instanceId: 'prompt-contributor', registrationName: 'lesson:style' } },
     ])
   })
+
+  it('keeps a two-paragraph contributed section as ONE attributed segment', () => {
+    const data = makeTrace()
+    const registration = data.records.find(record => record.name === 'registration/add' && record.instanceId === 'prompt-contributor')!
+    const section = '回答时使用短句\n\n每句不超过十个字'
+    data.payloads[registration.payloadRef!] = { ...(data.payloads[registration.payloadRef!] as Record<string, JsonValue>), detail: { order: 100, text: section } }
+    const requestSeq = 10
+    data.payloads[data.records[requestSeq]!.payloadRef!] = {
+      requestId: 'request-2',
+      system: `你是一个助手\n\n${section}`,
+      messages: [{ role: 'user', content: '你好' }],
+      tools: [],
+    }
+    const paragraphs = diffSystemParagraphs(data, requestSeq, data.payloads[data.records[requestSeq]!.payloadRef!] as never)
+    expect(paragraphs).toEqual([
+      { text: '你是一个助手', added: false, source: { instanceId: 'system-prompt', registrationName: 'deployment:persona' } },
+      { text: section, added: true, source: { instanceId: 'prompt-contributor', registrationName: 'lesson:style' } },
+    ])
+  })
+
+  it('leaves text between registered sections as unattributed segments', () => {
+    const data = makeTrace()
+    const requestSeq = 10
+    data.payloads[data.records[requestSeq]!.payloadRef!] = {
+      requestId: 'request-2',
+      system: '你是一个助手\n\n临时指令\n\n回答时使用短句',
+      messages: [{ role: 'user', content: '你好' }],
+      tools: [],
+    }
+    const paragraphs = diffSystemParagraphs(data, requestSeq, data.payloads[data.records[requestSeq]!.payloadRef!] as never)
+    expect(paragraphs).toEqual([
+      { text: '你是一个助手', added: false, source: { instanceId: 'system-prompt', registrationName: 'deployment:persona' } },
+      { text: '临时指令', added: true, source: null },
+      { text: '回答时使用短句', added: true, source: { instanceId: 'prompt-contributor', registrationName: 'lesson:style' } },
+    ])
+  })
 })
 
 describe('record summaries', () => {
@@ -310,7 +372,7 @@ describe('record summaries', () => {
     const data = makeTrace()
     expect(summarizeRecord(data.records[2]!, data.payloads)).toBe('接收用户输入「你好」')
     expect(summarizeRecord(data.records[6]!, data.payloads)).toBe('挂载 prompt-contributor')
-    expect(summarizeRecord(data.records[9]!, data.payloads)).toBe('agent-loop:request-prepared · 请求已组装')
+    expect(summarizeRecord(data.records[9]!, data.payloads)).toBe('agent-loop:request-prepared')
     expect(summarizeRecord(data.records[10]!, data.payloads)).toBe('发送模型请求')
     expect(summarizeRecord(data.records[12]!, data.payloads)).toBe('写入会话记录（turn/end）')
   })

@@ -134,11 +134,6 @@ export interface RequestFlow {
   window: { startSeq: number; endSeq: number }
 }
 
-const CHECKPOINT_SUMMARY: Record<string, string> = {
-  'request-prepared': '请求已组装',
-  'model-responded': '收到模型响应',
-}
-
 function stepPayload(record: TraceRecord, payloads: RunData['payloads']): ScenarioStep | null {
   if (!record.payloadRef) return null
   const payload = payloads[record.payloadRef] as ScenarioStep | undefined
@@ -169,9 +164,9 @@ export function summarizeRecord(record: TraceRecord, payloads: RunData['payloads
   }
   if (record.name === TraceName.registrationRemove) return '注销注册项'
   if (record.name.startsWith('checkpoint/')) {
-    const name = record.name.slice('checkpoint/'.length)
-    const summary = CHECKPOINT_SUMMARY[name.split(':')[1] ?? '']
-    return summary ? `${name} · ${summary}` : name
+    // Checkpoints come only from lesson plugins; there is no friendly-name map
+    // for agent-loop checkpoints the upstream kernel never records.
+    return record.name.slice('checkpoint/'.length)
   }
   if (record.name === TraceName.modelRequest) return '发送模型请求'
   if (record.name === TraceName.modelResponse) return '收到模型响应'
@@ -255,9 +250,12 @@ export function computeRequestFlow(
   const highlighted = new Set<string>()
 
   // Effective registrations at the cursor: contributor → service provider (§2.4 row 2).
+  // Only tools and prompt-section registrations have a provider to draw an edge
+  // to; other kinds (e.g. listener) get no edge.
   for (const registration of Object.values(snapshot.registrations)) {
     if (!registration.instanceId || !known.has(registration.instanceId)) continue
-    const service = registration.kind === 'prompt-section' ? 'systemPrompt' : 'tools'
+    const service = registration.kind === 'tool' ? 'tools' : registration.kind === 'prompt-section' ? 'systemPrompt' : null
+    if (!service) continue
     const target = providers[service]
     if (!target || target === registration.instanceId || !known.has(target)) continue
     const inWindow = registration.addedAtSeq >= (start?.record.seq ?? -1) && registration.addedAtSeq < (records[endIndex]?.seq ?? Number.MAX_SAFE_INTEGER)
@@ -415,23 +413,61 @@ export interface SystemParagraph {
 }
 
 /**
- * The system prompt of `request` as paragraphs, compared with the previous
- * request's. A paragraph's source is the latest registration added before the
- * request whose detail text equals it — never a guess from wording alone.
+ * The system prompt of `request` as segments, compared with the previous
+ * request's. The text is segmented by the registered section texts it contains
+ * (substring positions, so a section spanning several paragraphs stays ONE
+ * attributed segment); on overlapping matches the longest section wins, and
+ * between equal lengths the latest registration. The remaining text is split
+ * into unattributed segments on `\n\n`. A segment's source is a registration
+ * added before the request — never a guess from wording alone.
  */
 export function diffSystemParagraphs(data: RunData, requestSeq: number, request: ModelRequestPayload): SystemParagraph[] {
   const previous = previousRequest(data, requestSeq)
-  const before = new Set((previous?.system ?? '').split('\n\n'))
+  const previousSystem = previous?.system ?? ''
+  const previousParagraphs = new Set(previousSystem.split('\n\n'))
   const registrations = data.records
     .filter(record => record.name === TraceName.registrationAdd && record.seq <= requestSeq && record.instanceId)
-    .map(record => ({ instanceId: record.instanceId!, added: registrationPayload(record, data.payloads) }))
+    .map(record => ({ instanceId: record.instanceId!, seq: record.seq, added: registrationPayload(record, data.payloads) }))
     .filter(item => item.added !== null)
-  return request.system.split('\n\n').map(text => {
-    const source = [...registrations].reverse().find(item => (item.added!.detail as { text?: unknown })?.text === text)
-    return {
-      text,
-      added: !before.has(text),
-      source: source ? { instanceId: source.instanceId, registrationName: source.added!.name } : null,
+
+  // Every occurrence of every registered section text inside the system prompt.
+  interface Match { from: number; to: number; instanceId: string; name: string; seq: number }
+  const candidates: Match[] = []
+  for (const registration of registrations) {
+    const text = (registration.added!.detail as { text?: unknown })?.text
+    if (typeof text !== 'string' || !text) continue
+    let at = request.system.indexOf(text)
+    while (at >= 0) {
+      candidates.push({ from: at, to: at + text.length, instanceId: registration.instanceId, name: registration.added!.name, seq: registration.seq })
+      at = request.system.indexOf(text, at + 1)
     }
-  })
+  }
+  // Overlaps: the longest section wins; between equal lengths the latest registration.
+  candidates.sort((a, b) => (b.to - b.from) - (a.to - a.from) || b.seq - a.seq)
+  const attributed: Match[] = []
+  for (const candidate of candidates) {
+    if (attributed.some(other => candidate.from < other.to && other.from < candidate.to)) continue
+    attributed.push(candidate)
+  }
+  attributed.sort((a, b) => a.from - b.from)
+
+  const segments: SystemParagraph[] = []
+  let cursor = 0
+  const pushUnattributed = (text: string) => {
+    for (const part of text.split('\n\n')) {
+      if (!part) continue
+      segments.push({ text: part, added: !previousParagraphs.has(part), source: null })
+    }
+  }
+  for (const match of attributed) {
+    pushUnattributed(request.system.slice(cursor, match.from))
+    segments.push({
+      text: request.system.slice(match.from, match.to),
+      added: !previousSystem.includes(request.system.slice(match.from, match.to)),
+      source: { instanceId: match.instanceId, registrationName: match.name },
+    })
+    cursor = match.to
+  }
+  pushUnattributed(request.system.slice(cursor))
+  return segments
 }

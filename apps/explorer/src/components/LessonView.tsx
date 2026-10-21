@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { ArchitectureNode, BuiltLesson } from '@harness-explorer/lesson-kit/schema'
-import type { ModelRequestPayload, SourceRef } from '@harness-explorer/contracts'
+import type { Composition, ModelRequestPayload, SourceRef } from '@harness-explorer/contracts'
 import type { LessonStageView } from '@/lib/lesson-data'
 import { phaseHistory, useReplay } from '@/lib/replay'
 import { assignLayers, LAYER_META } from '@/lib/dataflow'
@@ -74,6 +74,8 @@ interface ChainItem {
   layer: number | null
   /** Label of the connector from the previous item (挂载 / inject / 被读取). */
   rel: string | null
+  /** The connector is inferred from declared dependencies, not observed in the trace. */
+  inferred: boolean
   self: boolean
 }
 
@@ -239,35 +241,41 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
   const layerName = layer !== null ? LAYER_META.find(meta => meta.layer === layer)?.name ?? null : null
 
   // ---- 树位置条：作用域 → inject 提供者 → 本实例 → 读取它的下游消费者 ----
-  const chain = useMemo((): ChainItem[] => {
+  // One chain per instance of the lesson's plugin (scoped-chat has a root and
+  // a scoped prompt-contributor); each row starts with the instance's scope.
+  const chains = useMemo((): ChainItem[][] => {
     const composition = shownComposition(state).composition
     const catalogStages = state.catalog?.stages ?? []
     if (!composition || !catalogStages.length) return []
-    const me = composition.instances.find(instance => instance.definitionId === lesson.pluginDefinitionId)
-    if (!me) return []
+    const mine = composition.instances.filter(instance => instance.definitionId === lesson.pluginDefinitionId)
+    if (!mine.length) return []
     const layers = assignLayers(composition.instances, catalogStages, state.catalog?.layers ?? {})
     const stageOf = (stageId: string) => catalogStages.find(item => item.id === stageId)
-    const myStage = stageOf(me.stageId)
-    const myLayer = layers.get(me.id) ?? 1
-    const items: ChainItem[] = [{ key: `scope:${me.scopeId}`, text: me.scopeId, layer: 0, rel: null, self: false }]
-    const providers: string[] = []
-    for (const service of myStage?.requires ?? []) {
-      const provider = composition.instances.find(candidate =>
-        candidate.id !== me.id && !providers.includes(candidate.id) && stageOf(candidate.stageId)?.provides.includes(service))
-      if (provider) providers.push(provider.id)
+    const chainFor = (me: Composition['instances'][number]): ChainItem[] => {
+      const myStage = stageOf(me.stageId)
+      const myLayer = layers.get(me.id) ?? 1
+      const items: ChainItem[] = [{ key: `scope:${me.scopeId}`, text: me.scopeId, layer: 0, rel: null, inferred: false, self: false }]
+      const providers: string[] = []
+      for (const service of myStage?.requires ?? []) {
+        const provider = composition.instances.find(candidate =>
+          candidate.id !== me.id && !providers.includes(candidate.id) && stageOf(candidate.stageId)?.provides.includes(service))
+        if (provider) providers.push(provider.id)
+      }
+      providers.sort((a, b) => (layers.get(a) ?? 1) - (layers.get(b) ?? 1))
+      for (const id of providers) items.push({ key: id, text: id, layer: layers.get(id) ?? null, rel: '挂载', inferred: false, self: false })
+      items.push({ key: me.id, text: me.id, layer: myLayer, rel: providers.length ? 'inject' : '挂载', inferred: false, self: true })
+      // Consumers: deeper-layer instances reading a service this one injects into or
+      // provides. Inferred from declared dependencies, not observed in the trace.
+      const touched = new Set([...myStage?.requires ?? [], ...myStage?.provides ?? []])
+      const consumers = composition.instances
+        .filter(candidate => candidate.id !== me.id
+          && (layers.get(candidate.id) ?? 1) > myLayer
+          && (stageOf(candidate.stageId)?.requires ?? []).some(service => touched.has(service)))
+        .sort((a, b) => (layers.get(a.id) ?? 1) - (layers.get(b.id) ?? 1))
+      for (const consumer of consumers) items.push({ key: consumer.id, text: consumer.id, layer: layers.get(consumer.id) ?? null, rel: '被读取', inferred: true, self: false })
+      return items
     }
-    providers.sort((a, b) => (layers.get(a) ?? 1) - (layers.get(b) ?? 1))
-    for (const id of providers) items.push({ key: id, text: id, layer: layers.get(id) ?? null, rel: '挂载', self: false })
-    items.push({ key: me.id, text: me.id, layer: myLayer, rel: providers.length ? 'inject' : '挂载', self: true })
-    // Consumers: deeper-layer instances reading a service this one injects into or provides.
-    const touched = new Set([...myStage?.requires ?? [], ...myStage?.provides ?? []])
-    const consumers = composition.instances
-      .filter(candidate => candidate.id !== me.id
-        && (layers.get(candidate.id) ?? 1) > myLayer
-        && (stageOf(candidate.stageId)?.requires ?? []).some(service => touched.has(service)))
-      .sort((a, b) => (layers.get(a.id) ?? 1) - (layers.get(b.id) ?? 1))
-    for (const consumer of consumers) items.push({ key: consumer.id, text: consumer.id, layer: layers.get(consumer.id) ?? null, rel: '被读取', self: false })
-    return items
+    return mine.map(chainFor)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.catalog, state.draft, state.selectedRunId, state.runData, lesson.pluginDefinitionId])
 
@@ -360,17 +368,28 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
 
       <div className="lesson__treebar">
         <span className="muted lesson__treebar-label">在树中的位置</span>
-        {chain.length ? (
-          <ol className="lesson__chain">
-            {chain.map(item => (
-              <li key={item.key}>
-                {item.rel ? <span className="lesson__chain-rel">— {item.rel} →</span> : null}
-                <span className={`lesson__chain-node${item.self ? ' is-self' : ''}`}>
-                  {item.layer !== null ? `L${item.layer} ` : ''}{item.text}
-                </span>
-              </li>
+        {chains.length ? (
+          <div className="lesson__chains">
+            {chains.map((chain, row) => (
+              <ol className="lesson__chain" key={chain.find(item => item.self)?.key ?? row}>
+                {chain.map(item => (
+                  <li key={item.key}>
+                    {item.rel ? (
+                      <span
+                        className={`lesson__chain-rel${item.inferred ? ' lesson__chain-rel--inferred' : ''}`}
+                        title={item.inferred ? '由依赖声明推断，不是轨迹记录' : undefined}
+                      >
+                        — {item.rel} →
+                      </span>
+                    ) : null}
+                    <span className={`lesson__chain-node${item.self ? ' is-self' : ''}`}>
+                      {item.layer !== null ? `L${item.layer} ` : ''}{item.text}
+                    </span>
+                  </li>
+                ))}
+              </ol>
             ))}
-          </ol>
+          </div>
         ) : <span className="muted">组合中没有 {lesson.pluginDefinitionId} 的实例；运行此阶段会使用课程自带的组合。</span>}
         <span className="spacer" />
         <span className="badge" aria-label="对应运行">{correspondence}</span>

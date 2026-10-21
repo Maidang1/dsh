@@ -23,6 +23,8 @@ interface Props {
   lessons: LessonsResponse | null
   /** The composition on screen (the selected run's revision or the draft). */
   composition: Composition
+  /** Instance selected in the tree; the observe card falls back to its lesson. */
+  selectedInstanceId: string | null
   onCursor(seq: number): void
   onSelectInstance(id: string): void
 }
@@ -71,12 +73,28 @@ function CurrentStepDetail({ data, seq, lessons, composition }: { data: RunData;
 }
 
 /** 「这一步要观察」: the lesson's expectedObservations, labelled as authored guidance, not trace (§2.5). */
-function ObserveCard({ data, seq, lessons, composition }: { data: RunData; seq: number; lessons: LessonsResponse | null; composition: Composition }) {
-  const record = data.records[seq]
-  const instance = record?.instanceId ? composition.instances.find(item => item.id === record.instanceId) : undefined
-  const lesson = lessonFor(lessons, instance)
-  const stage = lesson?.stages.find(item => item.codeStageId === instance?.stageId)
-  if (!lesson || !stage || stage.expectedObservations.length === 0) return null
+function ObserveCard({ data, seq, lessons, composition, flow, selectedInstanceId }: {
+  data: RunData
+  seq: number
+  lessons: LessonsResponse | null
+  composition: Composition
+  flow: RequestFlow | null
+  selectedInstanceId: string | null
+}) {
+  const byId = (id: string | null | undefined) => (id ? composition.instances.find(item => item.id === id) : undefined)
+  const matchFor = (instance: PluginInstance | undefined) => {
+    const lesson = lessonFor(lessons, instance)
+    const stage = lesson?.stages.find(item => item.codeStageId === instance?.stageId)
+    return lesson && stage && stage.expectedObservations.length > 0 ? { lesson, stage } : null
+  }
+  // The current record's instance first; on model/request that is agent-loop
+  // (no lesson), so fall back to the tree selection, then to the lesson
+  // instances that produced records in this request window (window order).
+  const windowInstances = flow ? [...new Set(flow.steps.map(step => step.instanceId).filter((id): id is string => id !== null))] : []
+  const candidates = [byId(data.records[seq]?.instanceId), byId(selectedInstanceId), ...windowInstances.map(byId)]
+  const match = candidates.map(matchFor).find(found => found !== null) ?? null
+  if (!match) return null
+  const { lesson, stage } = match
   return (
     <div className="flow-observe">
       <h4>这一步要观察</h4>
@@ -86,7 +104,7 @@ function ObserveCard({ data, seq, lessons, composition }: { data: RunData; seq: 
   )
 }
 
-export function DataFlowPanel({ data, flow, seq, following, lessons, composition, onCursor, onSelectInstance }: Props) {
+export function DataFlowPanel({ data, flow, seq, following, lessons, composition, selectedInstanceId, onCursor, onSelectInstance }: Props) {
   if (!data || !flow) {
     return <div className="panel-body"><p className="muted">还没有运行。运行后这里按一次请求展示数据流经的步骤。</p></div>
   }
@@ -114,7 +132,7 @@ export function DataFlowPanel({ data, flow, seq, following, lessons, composition
           </li>
         ))}
       </ol>
-      <ObserveCard data={data} seq={seq} lessons={lessons} composition={composition} />
+      <ObserveCard data={data} seq={seq} lessons={lessons} composition={composition} flow={flow} selectedInstanceId={selectedInstanceId} />
       <div className="flow-legend" aria-label="图例">
         <span><span className="swatch swatch--dep" aria-hidden />依赖 inject</span>
         <span><span className="swatch swatch--flown" aria-hidden />已流经</span>
