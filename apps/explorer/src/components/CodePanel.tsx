@@ -76,5 +76,6 @@ const mark: AnnotationHandler = {
 }
 
 export function LessonCode({ code }: { code: HighlightedCode }) {
-  return <Pre code={code} handlers={[mark, focus, tokenTransitions]} className="lesson-code" style={code.style} />
+  // tabIndex: the code block scrolls on its own, so it must be keyboard-focusable (WCAG 2.1.1).
+  return <Pre code={code} handlers={[mark, focus, tokenTransitions]} className="lesson-code" tabIndex={0} style={code.style} />
 }

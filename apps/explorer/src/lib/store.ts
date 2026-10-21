@@ -187,7 +187,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     compareRunId: null,
     cursor: null,
     selectedInstanceId: null,
-    layer: 'composition',
+    // The data-flow layer is the default view of the tree (docs/design/explorer-redesign.md §2.4).
+    layer: 'data',
     listView: false,
     adapterMode: 'deterministic',
     environment: null,

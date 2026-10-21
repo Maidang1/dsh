@@ -144,5 +144,9 @@ export type EnvironmentSnapshot = z.infer<typeof EnvironmentSnapshot>
 export const PluginResponsibility = z.enum(['session', 'prompt', 'tool', 'event-policy', 'model', 'agent-loop', 'other'])
 export type PluginResponsibility = z.infer<typeof PluginResponsibility>
 
+/** Layer of a plugin definition in the layered plugin tree (docs/design/explorer-redesign.md §5.2). */
+export const PluginLayer = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)])
+export type PluginLayer = z.infer<typeof PluginLayer>
+
 export const AdapterMode = z.enum(['deterministic', 'real'])
 export type AdapterMode = z.infer<typeof AdapterMode>

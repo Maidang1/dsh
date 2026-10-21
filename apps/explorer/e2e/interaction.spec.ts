@@ -152,6 +152,7 @@ test('a trace record leads to its instance and the code of the stage that ran', 
   const { records } = await page.request.get(`/api/runs/${runId}/trace`).then(response => response.json()) as { records: Array<{ seq: number; instanceId?: string }> }
   const target = records.find(record => record.instanceId === 'prompt-contributor')!
 
+  await page.getByRole('button', { name: '轨迹', exact: true }).click()
   await page.getByRole('slider', { name: '回放位置' }).fill(String(target.seq))
   const current = page.getByLabel('当前记录')
   await expect(current).toContainText(`当前记录 #${target.seq}`)
@@ -190,7 +191,7 @@ test('an added tool is declared, called, and its result reaches the next request
   await page.getByRole('button', { name: '运行教学代码' }).click()
   await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
 
-  await page.getByRole('tab', { name: '请求对比' }).click()
+  await page.getByRole('tab', { name: '对比', exact: true }).click()
   await page.getByLabel('请求 A').selectOption({ index: 0 })
   await page.getByLabel('请求 B').selectOption({ index: 1 })
   const diff = page.getByRole('region', { name: '请求对比' })
@@ -221,7 +222,7 @@ test('a lesson does not attribute a run of other code to the code it shows', asy
   await page.getByLabel('查看运行').selectOption(copyId)
   await page.locator('.react-flow__node[data-id="prompt-contributor"]').click()
   await page.getByRole('link', { name: '进入插件实现' }).click()
-  await page.getByRole('button', { name: '02-section' }).click()
+  await page.getByRole('button', { name: /^02 注册提示词片段/ }).click()
   await expect(page.getByLabel('对应运行')).toHaveText(`所选运行 ${copyId} 执行的是此阶段的另一版代码`)
   await page.getByRole('tab', { name: '状态与数据' }).click()
   await expect(page.locator('.stage-state')).toContainText('sourceHash 000000000000')
@@ -263,6 +264,8 @@ test('a section in a nested scope reaches only the sessions mapped to that scope
   await page.getByRole('button', { name: '新建作用域' }).click()
   await page.locator('.scope-editor li', { hasText: 'spare' }).getByRole('button', { name: '删除' }).click()
   await expect(page.locator('.scope-editor summary')).toHaveText('作用域（2）')
+  // The scope editor is a popover over the canvas; close it before clicking a node.
+  await page.locator('.scope-editor summary').click()
 
   await node('prompt-contributor').click()
   await page.getByRole('complementary', { name: '实例摘要' }).getByLabel('作用域').selectOption('agent-b')
@@ -272,11 +275,13 @@ test('a section in a nested scope reaches only the sessions mapped to that scope
   await page.getByRole('button', { name: '应用配置' }).click()
 
   // Upstream has no sessionScopes config: a scope lists the sessions whose agent lives in it.
-  const agentB = page.locator('.scope-editor > ul > li', { hasText: 'agent-b' })
+  await page.locator('.scope-editor summary').click()
+  const agentB = page.locator('.popover--scopes > ul > li', { hasText: 'agent-b' })
   await agentB.getByLabel('添加会话').fill('s-b')
   await agentB.getByRole('button', { name: '添加会话' }).click()
   await expect(agentB.locator('.scope-sessions li', { hasText: 's-b' })).toBeVisible()
-  await expect(page.locator('.scope-editor > ul > li', { hasText: 'agent-b' })).toContainText('不能删除：仍有实例：prompt-contributor')
+  await expect(agentB).toContainText('不能删除：仍有实例：prompt-contributor')
+  await page.locator('.scope-editor summary').click()
 
   await page.getByRole('button', { name: '运行教学代码' }).click()
   await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
@@ -296,6 +301,7 @@ test('a preset composition replaces the draft after confirmation and runs as shi
   await page.goto('/')
   await page.getByRole('button', { name: '运行教学代码' }).click()
   await expect(page.getByText('运行结果：已完成')).toBeVisible({ timeout: 20_000 })
+  await page.getByRole('button', { name: '预设…' }).click()
   const presets = page.getByRole('group', { name: '从预设开始' })
   await presets.getByLabel('预设组合').selectOption('scoped-chat')
   await presets.getByRole('button', { name: '载入预设…' }).click()

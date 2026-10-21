@@ -12,6 +12,7 @@ export const TraceName = {
   registrationRemove: 'registration/remove',
   dispatchEnter: 'dispatch/enter',
   dispatchReturn: 'dispatch/return',
+  /** instanceId on these two records is the instance that initiated the call (e.g. agent-loop), unlike other records where it is the instance the record belongs to. */
   modelRequest: 'model/request',
   modelResponse: 'model/response',
   sessionEvent: 'session/event',

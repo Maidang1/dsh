@@ -10,7 +10,9 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { TraceName } from '@harness-explorer/contracts'
 import type { SessionEventPayload } from '@harness-explorer/contracts'
 import { describe, expect, it } from 'vitest'
-import { lifecycleScenario, payloadOf, run, scenario } from './helpers.ts'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { SCRIPTED_PROVIDER } from '@harness-explorer/teaching-plugins'
+import { inlineStage, lifecycleScenario, minimalChat, payloadOf, run, scenario, withInline } from './helpers.ts'
 
 const SESSIONS = ['s-a', 's-b', 's-c', 's-d']
 
@@ -67,5 +69,38 @@ describe('OBS-01: observation does not change semantics', () => {
       'step/end', 'turn/end',
     ])
     expect(events.s!.at(-1)?.data).toEqual({ turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } })
+  })
+})
+
+/**
+ * explorer-redesign §5.1: model/request and model/response records carry the
+ * instanceId of the instance that issued the call.
+ */
+describe('model request attribution', () => {
+  it('records the requests of a turn on the agent-loop instance', async () => {
+    const result = await run({ scenario: scenario([{ kind: 'input', id: 'ask', sessionId: 's', text: '你好' }]) })
+    expect(result.error).toBeNull()
+    const requests = result.recorder.records.filter(record => record.name === TraceName.modelRequest)
+    const responses = result.recorder.records.filter(record => record.name === TraceName.modelResponse)
+    expect(requests).toHaveLength(1)
+    expect(responses).toHaveLength(1)
+    expect(requests[0]!.instanceId).toBe('agent-loop')
+    expect(responses[0]!.instanceId).toBe('agent-loop')
+  })
+
+  it('leaves instanceId off a request another plugin assembles itself', async () => {
+    const prober = inlineStage('prober', ['llm'], {
+      name: 'prober',
+      inject: ['llm'],
+      async apply(ctx: Context) {
+        const request = { provider: SCRIPTED_PROVIDER, model: 'greeting', messages: [createUserMessage({ content: [{ type: 'text', text: '你好' }], source: { kind: 'user' } })] }
+        for await (const _chunk of ctx.llm.stream(request)) { /* drain */ }
+      },
+    })
+    const result = await run({ ...withInline(minimalChat(), prober), scenario: scenario([{ kind: 'snapshot', id: 'look', label: 'look' }]) })
+    expect(result.error).toBeNull()
+    const records = result.recorder.records.filter(record => record.name === TraceName.modelRequest || record.name === TraceName.modelResponse)
+    expect(records).toHaveLength(2)
+    expect(records.map(record => record.instanceId)).toEqual([undefined, undefined])
   })
 })

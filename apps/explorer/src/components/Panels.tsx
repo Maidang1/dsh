@@ -2,7 +2,6 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { TimelineRows } from './TimelineRows'
 import { ROOT_SCOPE, sameJson } from '@harness-explorer/contracts'
 import type { AdapterMode, Composition, EnvironmentSnapshot, JsonValue, PluginInstance, PluginPhasePayload, PluginResponsibility, RuntimeState, ScopeDefinition } from '@harness-explorer/contracts'
 import type { ViewRegistration, ViewSnapshot } from '@harness-explorer/trace/browser'
@@ -10,7 +9,6 @@ import { api } from '@/lib/api'
 import type { Draft, InstalledPackage, LessonsResponse, PackageSearchResult, PublicCatalog, PublicStage } from '@/lib/api'
 import { describeFailure } from '@/lib/errors'
 import { useExplorer } from '@/lib/store'
-import type { RunData } from '@/lib/store'
 import { PHASE_LABEL, phaseOf } from './PluginTree'
 import type { PhaseChange } from '@/lib/replay'
 import { latestStages, parseConfig, planAddition, scopeIdProblem, scopeRemovalProblem, scopeSessionProblem } from '@/lib/library'
@@ -36,12 +34,14 @@ const OUTCOME_TEXT: Record<string, string> = {
 
 /**
  * Which run version and replay position the views show (docs/01 §10), kept in
- * the header so it stays visible whichever bottom tab is open.
+ * the replay bar so it stays visible whichever side tab is open.
  */
 export function ReplayPosition({ revisionId, seq, lastSeq, atScenarioEnd }: { revisionId: string | undefined; seq: number; lastSeq: number; atScenarioEnd: boolean }) {
+  // The full revision id lives in the run row; the bar shows enough to tell revisions apart.
+  const short = revisionId && revisionId.length > 12 ? revisionId.slice(0, 12) : revisionId
   return (
     <span className="badge" aria-label="当前位置">
-      {revisionId ? `版本 ${revisionId} · ` : ''}回放 #{seq} / #{lastSeq}{atScenarioEnd ? '（场景结束时）' : ''}
+      {short ? `版本 ${short} · ` : ''}回放 #{seq} / #{lastSeq}{atScenarioEnd ? '（场景结束时）' : ''}
     </span>
   )
 }
@@ -57,44 +57,50 @@ interface RunBarProps {
   connected: boolean
   adapterMode: AdapterMode
   environment: Record<AdapterMode, EnvironmentSnapshot> | null
+  /** Secondary line under the scenario on narrow screens: `run id · 回放 #seq` (§4). */
+  runMeta: string | null
   onAdapterMode(mode: AdapterMode): void
   onScenario(id: string): void
   onRun(): void
   onCancel(): void
 }
 
-export function RunBar({ catalog, draft, runtime, connected, adapterMode, environment, onAdapterMode, onScenario, onRun, onCancel }: RunBarProps) {
+/** Top bar: brand, scenario and model selectors, controller status capsule, the run button (§2.1). On narrow screens it compresses to scenario + meta + an icon run button (§4). */
+export function RunBar({ catalog, draft, runtime, connected, adapterMode, environment, runMeta, onAdapterMode, onScenario, onRun, onCancel }: RunBarProps) {
   const busy = runtime !== null && runtime.phase !== 'idle'
   const missing = environment?.real.variables.filter(variable => variable.sensitive && !variable.present).map(variable => variable.name) ?? ['DEEPSEEK_API_KEY']
   const scenario = catalog.scenarios.find(item => item.id === draft.scenarioId)
   const realAllowed = missing.length === 0 && scenario?.adapterModes.includes('real')
   return (
     <div className="run-bar" role="toolbar" aria-label="运行控制">
-      <label>
-        场景
-        <select value={draft.scenarioId} onChange={event => onScenario(event.target.value)}>
+      <label className="run-bar__scenario">
+        <span className="run-bar__label-text">场景</span>
+        <select aria-label="场景" value={draft.scenarioId} onChange={event => onScenario(event.target.value)}>
           {catalog.scenarios.map(scenario => <option key={scenario.id} value={scenario.id}>{scenario.title}</option>)}
         </select>
       </label>
-      <button type="button" className="primary" onClick={onRun} disabled={busy} title={busy ? '当前运行结束后才能再次运行' : undefined}>
-        运行教学代码
-      </button>
-      <label>
-        模型
-        <select value={adapterMode} onChange={event => onAdapterMode(event.target.value as AdapterMode)}>
-          <option value="deterministic">确定性模型（无需 API Key）</option>
+      <span className="run-bar__meta">{runMeta}</span>
+      <label className="run-bar__model">
+        <span className="run-bar__label-text">模型</span>
+        <select aria-label="模型" value={adapterMode} onChange={event => onAdapterMode(event.target.value as AdapterMode)}>
+          <option value="deterministic">确定性模型 · 无需 API Key</option>
           <option value="real" disabled={!realAllowed}>
             真实模型 DeepSeek{missing.length ? `（需在启动环境设置 ${missing.join('、')}）` : scenario?.adapterModes.includes('real') ? '' : '（当前场景不支持）'}
           </option>
         </select>
       </label>
-      <span className="badge">{adapterMode === 'real' ? '真实模型 · 结果不可严格复现 · 环境来自本机' : '确定性模型 · 可重复'}</span>
-      {busy ? <button type="button" onClick={onCancel}>停止运行</button> : null}
-      <span className="run-bar__phase" aria-live="polite">
-        控制器：{PHASE_TEXT[runtime?.phase ?? 'idle']}
+      <span className="badge">{adapterMode === 'real' ? '结果不可严格复现 · 环境来自本机' : '确定性模型 · 可重复'}</span>
+      <span className={`run-bar__phase${connected ? '' : ' is-off'}`} aria-live="polite">
+        <span className="dot" aria-hidden />
+        控制器{PHASE_TEXT[runtime?.phase ?? 'idle']} · {connected ? '已连接' : '未订阅'}
         {runtime?.error ? ` · ${runtime.error.message}` : ''}
       </span>
-      <span className={`badge ${connected ? '' : 'badge--muted'}`}>{connected ? '已连接' : '未订阅'}</span>
+      <span className="run-bar__actions">
+        {busy ? <button type="button" onClick={onCancel}>停止运行</button> : null}
+        <button type="button" className="primary run-bar__run" aria-label="运行教学代码" onClick={onRun} disabled={busy} title={busy ? '当前运行结束后才能再次运行' : undefined}>
+          <span aria-hidden>▶ </span><span className="run-bar__run-text">运行教学代码</span>
+        </button>
+      </span>
     </div>
   )
 }
@@ -134,7 +140,7 @@ function RemoveControl({ instanceId, consumers, registrations, onRemove }: {
   onRemove(id: string): void
 }) {
   const [confirming, setConfirming] = useState(false)
-  if (!confirming) return <button type="button" onClick={() => setConfirming(true)}>从组合中移除…</button>
+  if (!confirming) return <button type="button" className="danger" onClick={() => setConfirming(true)}>从组合中移除…</button>
   return (
     <div className="remove-confirm" role="group" aria-label="确认从组合中移除">
       <p><strong>从组合中移除 {instanceId}</strong></p>
@@ -176,8 +182,29 @@ function StateFix({ plugin, enabled, unavailable, editable, missingProviders, on
   return fix ? <p className="state-fix" aria-label="修复建议">修复：{fix}</p> : null
 }
 
+/** Empty-state legend for the 实例 tab when nothing is selected (§2.5). */
+function InspectorLegend() {
+  return (
+    <div className="inspector__empty">
+      <p className="muted">选择插件树中的一个实例查看状态与依赖。</p>
+      <h3>节点状态</h3>
+      <ul className="inspector__legend">
+        {Object.values(PHASE_LABEL).map(label => <li key={label.text}><span aria-hidden>{label.mark}</span> {label.text}</li>)}
+        <li><span aria-hidden>◐</span> 等待服务 / 等待中（原因未知）</li>
+        <li><span aria-hidden>·</span> 未启用（由场景挂载）</li>
+      </ul>
+      <h3>图层</h3>
+      <ul className="inspector__legend">
+        <li>组合：父子挂载关系与 root → L1 服务</li>
+        <li>依赖：consumer → provider，标注「已解析 / 声明」</li>
+        <li>数据流：回放游标所在一次请求里真实流经的注册与模型调用</li>
+      </ul>
+    </div>
+  )
+}
+
 export function Inspector({ instance, stage, snapshot, lessons, editable, stagesOfDefinition, consumers, missingProviders, onAddProviders, onRemove, onStage, onEnabled, history, seq, onCursor, scopes, onScope, onConfig }: InspectorProps) {
-  if (!instance) return <aside className="inspector"><p className="muted">选择插件树中的一个实例查看状态与依赖。</p></aside>
+  if (!instance) return <aside className="inspector"><InspectorLegend /></aside>
   const plugin = snapshot.plugins[instance.id]
   const phase = phaseOf(plugin, instance.enabled)
   const unavailable = (stage?.requires ?? []).filter(service => !snapshot.services[service]?.available)
@@ -296,8 +323,9 @@ function ConfigEditor({ config, configKeys, onApply }: { config: JsonValue; conf
 }
 
 /**
- * Start the draft over from a preset composition (fixtures/compositions).
- * It replaces the draft's composition, so it asks first; runs keep their own revisions.
+ * Start the draft over from a preset composition (fixtures/compositions), as a
+ * popover over the canvas (§2.3). It replaces the draft's composition, so it
+ * asks first; runs keep their own revisions.
  */
 export function PresetPicker({ presets, scenarios, onLoad }: {
   presets: Readonly<Record<string, Composition>>
@@ -306,24 +334,34 @@ export function PresetPicker({ presets, scenarios, onLoad }: {
   onLoad(id: string, scenarioId: string | undefined): void
 }) {
   const ids = Object.keys(presets)
+  const [open, setOpen] = useState(false)
   const [id, setId] = useState(ids[0] ?? '')
   const [confirming, setConfirming] = useState(false)
   if (!ids.length) return null
+  const close = () => { setOpen(false); setConfirming(false) }
   return (
-    <div className="preset-picker" role="group" aria-label="从预设开始">
-      <label>
-        预设组合
-        <select value={id} onChange={(event) => { setId(event.target.value); setConfirming(false) }}>
-          {ids.map(item => <option key={item} value={item}>{item}（{presets[item]!.instances.length} 个实例）</option>)}
-        </select>
-      </label>
-      {confirming ? (
-        <span>
-          草稿的组合将被 {id} 替换{scenarios[id] ? `，场景切换为 ${scenarios[id]}` : '，场景保持不变'}；历史运行不受影响。
-          <button type="button" className="danger" onClick={() => { onLoad(id, scenarios[id]); setConfirming(false) }}>确认载入</button>
-          <button type="button" onClick={() => setConfirming(false)}>取消</button>
-        </span>
-      ) : <button type="button" onClick={() => setConfirming(true)}>载入预设…</button>}
+    <div className="preset-popover">
+      <button type="button" className="tool-button" onClick={() => setOpen(!open)} aria-expanded={open}>预设…</button>
+      {open ? (
+        <div className="popover popover--presets">
+          <div className="preset-picker" role="group" aria-label="从预设开始">
+            <h3>从预设开始</h3>
+            <label>
+              预设组合
+              <select value={id} onChange={(event) => { setId(event.target.value); setConfirming(false) }}>
+                {ids.map(item => <option key={item} value={item}>{item}（{presets[item]!.instances.length} 个实例）</option>)}
+              </select>
+            </label>
+            {confirming ? (
+              <span>
+                草稿的组合将被 {id} 替换{scenarios[id] ? `，场景切换为 ${scenarios[id]}` : '，场景保持不变'}；历史运行不受影响。
+                <button type="button" className="danger" onClick={() => { onLoad(id, scenarios[id]); close() }}>确认载入</button>
+                <button type="button" onClick={() => setConfirming(false)}>取消</button>
+              </span>
+            ) : <button type="button" onClick={() => setConfirming(true)}>载入预设…</button>}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -348,46 +386,49 @@ export function ScopeEditor({ composition, onCreate, onRemove, onAddSession, onR
   return (
     <details className="scope-editor">
       <summary>作用域（{scopes.length}）</summary>
-      <ul>
-        {scopes.map((scope) => {
-          const problem = problems.get(scope.id)
-          return (
-            <li key={scope.id}>
-              {scope.id}{scope.parentId ? <span className="muted">（父：{scope.parentId}）</span> : <span className="muted">（根）</span>}
-              {problem
-                ? <span className="muted"> · 不能删除：{problem}</span>
-                : <> <button type="button" className="link-button" onClick={() => onRemove(scope.id)}>删除</button></>}
-              {scope.id === ROOT_SCOPE ? null : (
-                <ScopeSessions scope={scope} scopes={scopes} onAdd={onAddSession} onRemove={onRemoveSession} />
-              )}
-            </li>
-          )
-        })}
-      </ul>
-      <p className="muted">作用域是上游 dsh-scope 的注册层：作用域里的实例注册的提示词片段与工具只对住在该作用域的会话可见；会话由作用域的 sessions 列出，未列出的会话住在根作用域。服务在整个组合中解析。</p>
-      <label>
-        新作用域
-        <input value={id} onChange={event => setId(event.target.value.trim())} placeholder="例如 agent-b" />
-      </label>
-      <label>
-        父作用域
-        <select value={parent} onChange={event => setParentId(event.target.value)}>
-          {scopes.map(scope => <option key={scope.id} value={scope.id}>{scope.id}</option>)}
-        </select>
-      </label>
-      {problem ? <p className="error-text" role="status">{problem}</p> : null}
-      <button
-        type="button"
-        disabled={!id || problem !== null || saving}
-        onClick={async () => {
-          setSaving(true)
-          // Keep the name if the save did not take, e.g. the draft changed in another tab.
-          if (await onCreate(id, parent)) setId('')
-          setSaving(false)
-        }}
-      >
-        新建作用域
-      </button>
+      <div className="popover popover--scopes">
+        <h3>作用域</h3>
+        <ul>
+          {scopes.map((scope) => {
+            const problem = problems.get(scope.id)
+            return (
+              <li key={scope.id}>
+                {scope.id}{scope.parentId ? <span className="muted">（父：{scope.parentId}）</span> : <span className="muted">（根）</span>}
+                {problem
+                  ? <span className="muted"> · 不能删除：{problem}</span>
+                  : <> <button type="button" className="link-button" onClick={() => onRemove(scope.id)}>删除</button></>}
+                {scope.id === ROOT_SCOPE ? null : (
+                  <ScopeSessions scope={scope} scopes={scopes} onAdd={onAddSession} onRemove={onRemoveSession} />
+                )}
+              </li>
+            )
+          })}
+        </ul>
+        <p className="muted">作用域是上游 dsh-scope 的注册层：作用域里的实例注册的提示词片段与工具只对住在该作用域的会话可见；会话由作用域的 sessions 列出，未列出的会话住在根作用域。服务在整个组合中解析。</p>
+        <label>
+          新作用域
+          <input value={id} onChange={event => setId(event.target.value.trim())} placeholder="例如 agent-b" />
+        </label>
+        <label>
+          父作用域
+          <select value={parent} onChange={event => setParentId(event.target.value)}>
+            {scopes.map(scope => <option key={scope.id} value={scope.id}>{scope.id}</option>)}
+          </select>
+        </label>
+        {problem ? <p className="error-text" role="status">{problem}</p> : null}
+        <button
+          type="button"
+          disabled={!id || problem !== null || saving}
+          onClick={async () => {
+            setSaving(true)
+            // Keep the name if the save did not take, e.g. the draft changed in another tab.
+            if (await onCreate(id, parent)) setId('')
+            setSaving(false)
+          }}
+        >
+          新建作用域
+        </button>
+      </div>
     </details>
   )
 }
@@ -548,8 +589,17 @@ interface LibraryProps {
   onAdd(stages: PublicStage[], scopeId: string): void
 }
 
-export function PluginLibrary({ stages, responsibilities, draft, onAdd }: LibraryProps) {
-  const [open, setOpen] = useState(false)
+/**
+ * Plugin library: the trigger lives in the canvas tools, the drawer panel and
+ * its overlay are rendered by the workbench as siblings of the canvas (§2.3,
+ * screen 01c) — inside .canvas-tools an absolute panel would size against the
+ * tool strip instead of the tree section.
+ */
+export function PluginLibraryTrigger({ open, onToggle }: { open: boolean; onToggle(): void }) {
+  return <button type="button" className="tool-button tool-button--accent" onClick={onToggle} aria-expanded={open}>＋ 添加插件</button>
+}
+
+export function PluginLibraryPanel({ stages, responsibilities, draft, onAdd, onClose }: LibraryProps & { onClose(): void }) {
   const scopes = draft.composition.scopes
   const [scopeId, setScopeId] = useState(ROOT_SCOPE)
   const target = scopes.some(scope => scope.id === scopeId) ? scopeId : ROOT_SCOPE
@@ -557,12 +607,15 @@ export function PluginLibrary({ stages, responsibilities, draft, onAdd }: Librar
   const definitions = useMemo(() => latestStages(stages), [stages])
   const present = (Object.keys(RESPONSIBILITY_LABEL) as PluginResponsibility[])
     .filter(responsibility => definitions.some(stage => responsibilities[stage.pluginDefinitionId] === responsibility))
-  const add = (selected: PublicStage[]) => { onAdd(selected, target); setOpen(false) }
+  const add = (selected: PublicStage[]) => { onAdd(selected, target); onClose() }
   return (
-    <div className="library">
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}>添加插件</button>
-      {open ? (
-        <div className="library__panel">
+    <>
+      <button type="button" className="library__overlay" aria-label="关闭插件库" onClick={onClose} />
+      <div className="library__panel">
+        <div className="library__head">
+          <h3>插件库</h3>
+          <button type="button" aria-label="关闭插件库面板" onClick={onClose}>✕</button>
+        </div>
         <NpmPackages />
         {scopes.length > 1 ? (
           <label>
@@ -608,19 +661,9 @@ export function PluginLibrary({ stages, responsibilities, draft, onAdd }: Librar
             )
           })}
         </ul>
-        </div>
-      ) : null}
-    </div>
+      </div>
+    </>
   )
-}
-
-interface TimelineProps {
-  data: RunData | undefined
-  seq: number
-  lastSeq: number
-  onCursor(seq: number | null): void
-  lessons: LessonsResponse | null
-  onSelectInstance(id: string): void
 }
 
 /**
@@ -629,110 +672,3 @@ interface TimelineProps {
  */
 export const lessonHref = (lessonId: string, instance: PluginInstance) =>
   `/plugin/${lessonId}?instance=${encodeURIComponent(instance.id)}&stage=${encodeURIComponent(instance.stageId)}`
-
-/**
- * The record at the cursor and the instance it belongs to, with the stage
- * taken from the run's own revision rather than the current draft.
- */
-function CurrentRecord({ data, seq, lessons, onSelectInstance }: { data: RunData; seq: number; lessons: LessonsResponse | null; onSelectInstance(id: string): void }) {
-  const record = data.records[seq]
-  if (!record) return null
-  const instance = record.instanceId ? data.revision?.composition.instances.find(item => item.id === record.instanceId) : undefined
-  const lesson = instance ? lessons?.lessons.find(item => item.pluginDefinitionId === instance.definitionId) : undefined
-  const ranStage = lesson?.stages.some(stage => stage.codeStageId === instance?.stageId)
-  return (
-    <p className="timeline__current" aria-label="当前记录">
-      当前记录 #{record.seq} <code>{record.name}</code>
-      {instance ? (
-        <>
-          {' '}· 实例 {instance.id}（本次运行的阶段 {instance.stageId}）
-          {' '}<button type="button" className="link-button" onClick={() => onSelectInstance(instance.id)}>在插件树中选中</button>
-          {lesson && ranStage ? <>{' '}<Link className="link-button" href={lessonHref(lesson.id, instance)}>查看该阶段代码</Link></> : null}
-        </>
-      ) : record.instanceId ? ` · 实例 ${record.instanceId}` : null}
-    </p>
-  )
-}
-
-/** Cursor step interval at 1× playback. */
-const PLAYBACK_MS = 400
-
-const KIND_FILTERS = ['全部', 'checkpoint', 'lifecycle', 'session', 'data', 'service', 'diagnostic'] as const
-
-export function Timeline({ data, seq, lastSeq, onCursor, lessons, onSelectInstance }: TimelineProps) {
-  const [filter, setFilter] = useState<(typeof KIND_FILTERS)[number]>('全部')
-  const count = data?.records.length ?? 0
-  const records = useMemo(
-    () => (data ? (filter === '全部' ? data.records : data.records.filter(record => record.kind === filter)) : []),
-    // Records only grow; their count identifies the contents.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data?.runId, count, filter],
-  )
-  // Replay playback only moves the cursor; it never runs plugins or changes logicalTime.
-  const [playing, setPlaying] = useState(false)
-  const [speed, setSpeed] = useState(1)
-  useEffect(() => {
-    if (!playing) return
-    const timer = setInterval(() => {
-      const next = records.find(record => record.seq > seq)
-      if (next) onCursor(next.seq)
-      else setPlaying(false)
-    }, PLAYBACK_MS / speed)
-    return () => clearInterval(timer)
-  }, [playing, speed, records, seq, onCursor])
-  useEffect(() => setPlaying(false), [data?.runId])
-
-  if (!data) return <section className="timeline"><p className="muted">还没有运行。点击“运行教学代码”。</p></section>
-  const togglePlayback = () => {
-    if (playing) return setPlaying(false)
-    if (!records.some(record => record.seq > seq)) onCursor(-1)
-    setPlaying(true)
-  }
-  const step = (direction: 1 | -1) => {
-    // Records are sorted by seq: the first one after the cursor, or the last one before it.
-    const after = records.findIndex(record => record.seq > seq)
-    const end = after < 0 ? records.length : after
-    const before = records[end - 1]?.seq === seq ? end - 2 : end - 1
-    const target = direction > 0 ? records[after] : records[before]
-    if (target) onCursor(target.seq)
-    else if (direction < 0) onCursor(-1)
-  }
-  return (
-    <section className="timeline" aria-label="执行轨迹">
-      <div className="timeline__controls">
-        <button type="button" onClick={togglePlayback} aria-pressed={playing}>{playing ? '暂停回放' : '播放回放'}</button>
-        <label>
-          速度
-          <select value={speed} onChange={event => setSpeed(Number(event.target.value))}>
-            {[1, 2, 4].map(value => <option key={value} value={value}>{value}×</option>)}
-          </select>
-        </label>
-        <button type="button" onClick={() => step(-1)} aria-label="上一条记录">上一步</button>
-        <button type="button" onClick={() => step(1)} aria-label="下一条记录">下一步</button>
-        <button type="button" onClick={() => onCursor(null)}>场景结束时</button>
-        <button type="button" onClick={() => onCursor(lastSeq)}>到最新（含结算）</button>
-        <input
-          type="range"
-          min={-1}
-          max={Math.max(lastSeq, -1)}
-          value={seq}
-          onChange={event => onCursor(Number(event.target.value))}
-          aria-label="回放位置"
-        />
-        <span>回放位置 {seq} / {lastSeq}</span>
-        <label>
-          类型
-          <select value={filter} onChange={event => setFilter(event.target.value as typeof filter)}>
-            {KIND_FILTERS.map(kind => <option key={kind} value={kind}>{kind}</option>)}
-          </select>
-        </label>
-        <span className="muted">回放只移动游标，不会重新执行插件。</span>
-      </div>
-      <CurrentRecord data={data} seq={seq} lessons={lessons} onSelectInstance={onSelectInstance} />
-      {data.gaps.length ? <p className="warning-text">轨迹缺口：{data.gaps.map(gap => `${gap.fromSeq}–${gap.toSeq}`).join('，')}，结果不完整。</p> : null}
-      {data.settled ? <p className="muted">运行结果：{outcomeText(data.settled.outcome)}，最后序号 {data.settled.finalSeq}</p> : <p className="muted">运行未结算，结果尚不完整。</p>}
-      {data.settled?.completeness === 'truncated' ? <p className="warning-text">轨迹不完整：达到采集上限、写盘失败或运行中断，缺失的尾部不能视为成功。</p> : null}
-      <TimelineRows records={records} payloads={data.payloads} seq={seq} onCursor={onCursor} />
-    </section>
-  )
-}

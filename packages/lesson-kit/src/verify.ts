@@ -118,9 +118,17 @@ export interface UpstreamMismatch {
   reason: string
 }
 
-/** Check every upstream excerpt against a checkout of the pinned commit. */
+/** Check every upstream excerpt, and every upstream file a lesson shows, against a checkout of the pinned commit. */
 export async function verifyUpstreamRefs(lessonBuild: LessonBuild, upstreamDir: string): Promise<UpstreamMismatch[]> {
   const mismatches: UpstreamMismatch[] = []
+  for (const stage of lessonBuild.upstreamStages ?? []) {
+    for (const file of stage.files) {
+      const source = await readFile(join(upstreamDir, file.path), 'utf8').catch(() => null)
+      if (source !== file.content) {
+        mismatches.push({ id: stage.definition.id, path: file.path, reason: source === null ? 'file does not exist at the pinned commit' : 'shown source differs from the pinned commit' })
+      }
+    }
+  }
   for (const ref of lessonBuild.lessons.flatMap(lesson => lesson.upstreamRefs)) {
     let source: string
     try {

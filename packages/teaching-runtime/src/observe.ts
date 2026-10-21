@@ -6,6 +6,7 @@
  * every chunk through unchanged.
  */
 import type { Context, Fiber } from '@deepseek-ai/cordis'
+import { isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-agent-loop'
@@ -105,6 +106,8 @@ export class Observer {
   private readonly disposers: Array<() => unknown> = []
   private readonly turns = new Map<string, { turn?: number | undefined; step?: number | undefined }>()
   private requestCounter = 0
+  /** The instance currently providing each service, from `internal/service`. */
+  private readonly providers = new Map<string, string | null>()
   /** Scenario step currently executing, attached to every record. */
   currentStepId: string | undefined
   /** Called after a teaching checkpoint is recorded. */
@@ -229,7 +232,11 @@ export class Observer {
 
   private async* observeStream(options: GenerateOptions, next: () => AsyncIterable<StreamChunk>): AsyncIterable<StreamChunk> {
     const requestId = `request-${++this.requestCounter}`
-    this.record({ kind: 'data', name: TraceName.modelRequest, payload: modelRequestPayload(requestId, options) })
+    // Requests the agent loop assembled are attributed to the instance providing
+    // `agentLoop` (explorer-redesign §5.1); other callers stay unattributed.
+    const initiator = isAgentLoopRequest(options) ? this.providers.get('agentLoop') ?? undefined : undefined
+    const attributed = initiator ? { instanceId: initiator } : {}
+    this.record({ kind: 'data', name: TraceName.modelRequest, ...attributed, payload: modelRequestPayload(requestId, options) })
     let text = ''
     const toolCalls: Array<{ id: string; name: string; arguments: JsonValue }> = []
     let finish: JsonValue = null
@@ -246,7 +253,7 @@ export class Observer {
       failure = error instanceof Error ? { name: error.name, message: error.message } : { name: 'Error', message: String(error) }
       throw error
     } finally {
-      this.record({ kind: 'data', name: TraceName.modelResponse, payload: { requestId, text, toolCalls, finish, error: failure } })
+      this.record({ kind: 'data', name: TraceName.modelResponse, ...attributed, payload: { requestId, text, toolCalls, finish, error: failure } })
     }
   }
 
@@ -281,6 +288,8 @@ export class Observer {
 
   private serviceChanged(name: string, value: unknown, provider: Context) {
     const providerInstanceId = this.instanceOf(provider.fiber) ?? null
+    if (value === undefined) this.providers.delete(name)
+    else this.providers.set(name, providerInstanceId)
     // Undeclared services of a mounted instance are recorded too, so a stage
     // whose catalog `provides` is wrong shows up instead of being invisible.
     if (!this.watchedServices.has(name) && providerInstanceId === null) return

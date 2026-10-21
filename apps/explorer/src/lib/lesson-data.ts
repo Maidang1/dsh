@@ -33,6 +33,10 @@ export interface LessonStageView {
   stage: BuiltLessonStage
   files: StageFileView[]
   sourceRefs: SourceRef[]
+  /** Upstream code is the package's source at the pinned commit; the published module of that release is what runs. */
+  origin: 'teaching' | 'upstream'
+  /** The npm package an upstream stage runs. */
+  package?: { name: string; version: string }
 }
 
 /** Lines of `after` that are new compared with `before` (1-based), by LCS. */
@@ -68,14 +72,18 @@ function ranges(lines: number[]) {
 export async function lessonStageViews(lesson: BuiltLesson, stages: readonly BuiltStage[]): Promise<LessonStageView[]> {
   const byId = new Map(stages.map(stage => [stage.definition.id, stage]))
   const views: LessonStageView[] = []
-  let previous: BuiltStage | undefined
+  let lastCode: BuiltStage | undefined
+  let beforeLast: BuiltStage | undefined
   for (const stage of lesson.stages) {
     const code = byId.get(stage.codeStageId)!
+    // Explanation stages re-show an earlier code stage; their diff baseline is the code
+    // stage that preceded it, so the added-line marks carry over (docs/design §3.3).
+    const baseline = code === lastCode ? beforeLast : lastCode
     const files: StageFileView[] = []
     for (const [index, file] of code.files.entries()) {
       // The entry file changes path between stages; compare it with the previous entry.
-      const before = index === 0 ? previous?.files[0] : previous?.files.find(item => item.path === file.path)
-      const diff = before && before !== file && previous !== code ? addedLines(before.content, file.content) : { added: [], removed: 0 }
+      const before = index === 0 ? baseline?.files[0] : baseline?.files.find(item => item.path === file.path)
+      const diff = before && before !== file ? addedLines(before.content, file.content) : { added: [], removed: 0 }
       const highlighted = await highlight({ value: file.content, lang: 'ts', meta: '' }, CODE_THEME)
       for (const ref of code.sourceRefs.filter(item => item.path === file.path && stage.focusAnchors.includes(item.symbol ?? ''))) {
         highlighted.annotations.push({ name: 'focus', query: ref.symbol ?? '', fromLineNumber: ref.startLine, toLineNumber: ref.endLine })
@@ -85,8 +93,8 @@ export async function lessonStageViews(lesson: BuiltLesson, stages: readonly Bui
       }
       files.push({ key: index === 0 ? 'entry' : file.path, path: file.path, code: highlighted, added: diff.added.length, removed: diff.removed })
     }
-    views.push({ stage, files, sourceRefs: code.sourceRefs })
-    previous = code
+    views.push({ stage, files, sourceRefs: code.sourceRefs, origin: code.definition.origin, package: code.definition.package })
+    if (code !== lastCode) { beforeLast = lastCode; lastCode = code }
   }
   return views
 }

@@ -113,6 +113,7 @@ function publicCatalog(catalog: Catalog) {
     upstreamCommit: catalog.upstreamCommit,
     stages: catalog.stages.map(({ module: _module, ...stage }) => stage),
     responsibilities: catalog.responsibilities,
+    layers: catalog.layers,
     presetScenarios: catalog.presetScenarios,
     scenarios: Object.values(catalog.scenarios),
   }

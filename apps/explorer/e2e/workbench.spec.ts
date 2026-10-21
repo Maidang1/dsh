@@ -44,6 +44,8 @@ test('runs the scenario and replays without re-executing', async () => {
 })
 
 test('renders only the visible part of a long trace and follows the cursor', async () => {
+  // The record list lives in the trace drawer over the canvas now (§2.7).
+  await page.getByRole('button', { name: '轨迹', exact: true }).click()
   const total = (await page.request.get('/api/runs').then(response => response.json()))[0].lastSeq + 1
   const rows = page.locator('.timeline__row')
   expect(await rows.count()).toBeLessThan(total)
@@ -55,6 +57,8 @@ test('renders only the visible part of a long trace and follows the cursor', asy
   await page.keyboard.press('ArrowUp')
   await expect(page.locator('.timeline__row.is-current')).toContainText(`#${total - 2}`)
   await expect(page.getByText(`回放位置 ${total - 2} /`)).toBeVisible()
+  // The drawer floats over the canvas; close it so later tests can click what was under it.
+  await page.getByRole('button', { name: '轨迹', exact: true }).click()
 })
 
 test('plays the replay at a chosen speed and pauses without running anything', async () => {
@@ -72,7 +76,7 @@ test('plays the replay at a chosen speed and pauses without running anything', a
 })
 
 test('lists the lifecycle history of an instance and jumps to a transition', async () => {
-  await page.getByLabel('列表视图').check()
+  await page.getByRole('button', { name: '列表', exact: true }).click()
   await page.getByRole('list', { name: '插件列表' }).getByRole('button', { name: /^prompt-contributor/ }).click()
   const history = page.getByRole('list', { name: /状态变化/ })
   const activation = history.getByRole('button', { name: /已激活.*步骤 mount$/ })
@@ -82,18 +86,64 @@ test('lists the lifecycle history of an instance and jumps to a transition', asy
   await activation.click()
   await expect(page.getByText(`回放位置 ${seq} /`)).toBeVisible()
   await expect(activation).toHaveAttribute('aria-current', 'step')
-  await page.getByLabel('列表视图').uncheck()
+  await page.getByRole('button', { name: '图', exact: true }).click()
+})
+
+/** Playback leftovers from earlier serial tests must not leak into later ones. */
+async function pausePlayback(page: Page) {
+  const pause = page.getByRole('button', { name: '暂停回放' })
+  if (await pause.isVisible()) await pause.click()
+}
+
+/**
+ * Focus a canvas node and confirm focus landed before dispatching keys.
+ * xyflow hides each node (visibility: hidden) until it is measured; right after
+ * the list→graph remount there is a window where programmatic focus() is a
+ * silent no-op, and neither locator.focus() nor locator.press() verifies that
+ * focus actually moved. Retry until toBeFocused passes, then send the key.
+ */
+async function focusCanvasNode(page: Page, name: string) {
+  const node = page.locator('.plugin-node', { hasText: name })
+  await expect(async () => {
+    await node.focus()
+    await expect(node).toBeFocused()
+  }).toPass({ intervals: [20, 50, 100] })
+}
+
+test('selects a canvas node from the keyboard', async () => {
+  // Independent of earlier tests' leftovers: graph view on, playback off.
+  await page.getByRole('button', { name: '图', exact: true }).click()
+  await pausePlayback(page)
+  await focusCanvasNode(page, 'agent-loop')
+  await page.keyboard.press('Space')
+  const summary = page.getByRole('complementary', { name: '实例摘要' })
+  await expect(summary.getByRole('heading', { name: 'agent-loop' })).toBeVisible()
+})
+
+test('selects a canvas node from the keyboard while playback is running', async () => {
+  await page.getByRole('button', { name: '图', exact: true }).click()
+  await pausePlayback(page)
+  await page.getByRole('slider', { name: '回放位置' }).fill('0')
+  await page.getByLabel('速度').selectOption('4')
+  await page.getByRole('button', { name: '播放回放' }).click()
+  // The cursor moves every 100 ms at 4x and the tree rebuilds its nodes on each
+  // move; keyboard selection must still work.
+  await focusCanvasNode(page, 'prompt-contributor')
+  await page.keyboard.press('Space')
+  const summary = page.getByRole('complementary', { name: '实例摘要' })
+  await expect(summary.getByRole('heading', { name: 'prompt-contributor' })).toBeVisible()
+  await pausePlayback(page)
 })
 
 test('compares the request before and after the contributor is mounted', async () => {
-  await page.getByRole('tab', { name: '请求对比' }).click()
+  await page.getByRole('tab', { name: '对比' }).click()
   await page.getByLabel('请求 A').selectOption({ index: 0 })
   await page.getByLabel('请求 B').selectOption({ index: 1 })
   await expect(page.locator('.diff__added', { hasText: '回答时使用短句' }).first()).toBeVisible()
 })
 
 test('compares registry, process and session records with another run', async () => {
-  await page.getByRole('tab', { name: '请求对比' }).click()
+  await page.getByRole('tab', { name: '对比' }).click()
   const compare = page.getByLabel('对照运行')
   // Any earlier run will do (the lesson specs leave some); the comparison is what is checked.
   await compare.selectOption({ index: 1 })
@@ -110,7 +160,7 @@ test('compares registry, process and session records with another run', async ()
 test('keeps the run after a reload and offers a text list of the tree', async () => {
   await page.reload()
   await expect(page.getByText('运行结果：已完成')).toBeVisible()
-  await page.getByLabel('列表视图').check()
+  await page.getByRole('button', { name: '列表', exact: true }).click()
   const list = page.getByRole('list', { name: '插件列表' })
   await expect(list).toContainText('prompt-contributor')
   await list.getByRole('button', { name: /^system-prompt/ }).focus()

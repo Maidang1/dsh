@@ -159,5 +159,5 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   }
   const repoRoot = fileURLToPath(new URL('../', import.meta.url))
   const written = await scaffoldLesson({ repoRoot, id, title: titleWords.join(' ') || id })
-  console.log(['created:', ...written.map(path => `  ${path}`), '', `next: add '${id}' to responsibilities in packages/teaching-plugins/src/catalog.ts`, '      pnpm lessons:build && pnpm lessons:verify', 'guide: docs/authoring.md'].join('\n'))
+  console.log(['created:', ...written.map(path => `  ${path}`), '', `next: add '${id}' to responsibilities and layers in packages/teaching-plugins/src/catalog.ts`, '      pnpm lessons:build && pnpm lessons:verify', 'guide: docs/authoring.md'].join('\n'))
 }

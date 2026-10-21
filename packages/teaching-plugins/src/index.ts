@@ -5,7 +5,7 @@
  */
 export { checkpoint } from '../shared/checkpoint.ts'
 export { SCRIPTED_PROVIDER, ScriptMismatchError } from '../llm-scripted/stages/main/index.ts'
-export { devStages, responsibilities, teachingStages } from './catalog.ts'
+export { devStages, layers, responsibilities, teachingStages } from './catalog.ts'
 export {
   UPSTREAM_COMMIT,
   UPSTREAM_SCOPE,
