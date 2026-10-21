@@ -217,13 +217,19 @@ agent-loop 注册的 inbox 与 turn-boundary 投影就是现成的使用方，�
 ## 8 风险与待定
 
 1. **编译产物与原文的对应只靠版本标签。** 如需更强保证，可在构建时用上游 tsconfig 编译所示源码，与 npm `lib/index.js` 比较导出名；成本较高，先不做，界面如实说明。
-2. **大文件渲染。** tools 的 `index.ts` 1993 行，每个阶段都会高亮一次并写入静态页面。相邻阶段代码相同时只差注解，可复用高亮结果；试点时测量页面体积，必要时只展示引用片段所在区间加上下文。
+2. **大文件渲染。** tools 的 `index.ts` 1993 行。课程数据按 `codeStageId` 共享高亮源码，每个阶段只携带焦点与差异注解；system-prompt 试点的静态页从重复高亮时约 1.0 MB 降至约 465 KB。制作 tools 课程时仍需测量页面体积，过大时再评估只展示引用片段与上下文。
 3. **确定性场景覆盖不到的路径**（重试、真实提供方、中断恢复）只能做解释阶段，课程验证等级不能写成全部可执行。
 4. **固定 commit 升级。** 行号与哈希全部失效，构建会逐条报错；升级流程为：更新 `upstream-lock.json` 与 npm 版本 → `lessons:build` 列出失效引用 → 用 `lessons:ref` 重新固定。
 5. **试点后可能调整形式。** 如果导读形式不理想（例如希望按调用路径跨包讲解，而不是按包），K1 评审后修改本方案再继续。
 
 ## 9 K0 当前状态
 
-已实现（本 PR）：§4.4 全部改动（`upstreamStages`、`upstreamDir`、上游阶段构建与锚点、引用哈希核对、`ensureUpstream()`、`lessons:ref`、展示文件核对），以及 §4.5 中 `lesson-data.ts`、课程页与 `LessonView.tsx` 的改动（来源说明、上游对照页文案、切换阶段时滚动到聚焦片段）。
+K0 已完成：§4.4 的上游阶段构建、锚点与哈希校验、共享检出和 `lessons:ref`；§4.5 的课程数据、上游来源说明和阶段焦点滚动；§7 的临时检出构建测试与浏览器课程闭环测试；`chat-greeting`、`tool-calculator`、`chat-cancel` 场景及其确定性执行测试；README、作者指南与 MIT 来源说明。CI 的 `lessons:build` 在 `lessons:verify` 和 `lessons:verify-upstream` 前调用 `ensureUpstream()`，后续检查复用同一检出。
 
-尚未完成：§7 的 lesson-kit 与 explorer 测试；§5 所需的三个场景；CI 中让检出在 `lessons:build` 前就位；README 与 `THIRD_PARTY_NOTICES.md` 的说明（§4.6）；`Panels.tsx` 对无课程插件的说明（可选）。现有课程都不读取上游阶段，仓库里还没有覆盖上游阶段路径的测试。提交前用临时的 system-prompt 课程手动验证过：上游阶段能构建，锚点 id 与行号正确，课程阶段 sourceHash 等于 npm 入口哈希，可执行阶段在 `prompt-section-lifecycle` 上运行完成，展示文件被改动或引用行号漂移时分别被 `verifyUpstreamRefs` 和构建拒绝。
+K0 另外新增 `kernel-chat` 与 `calculator-chat` 组合：前者让系统提示词课程在不同阶段分别验证注册生命周期和作用域覆盖，后者用于在不启用默认拒绝策略时运行计算器工具场景。可选的“没有课程”插件提示尚未添加，不影响课程入口。
+
+## 10 K1 试点当前状态
+
+`content/plugins/system-prompt/` 已实现五阶段上游导读，覆盖配置、片段注册与顺序、作用域层、动态提供者与变量插值、组装与渲染。上游引用由 `lessons:ref` 生成并经固定 commit 哈希校验；可执行阶段使用 `chat-greeting`、`prompt-section-lifecycle` 与 `system-prompt-scope`，未由场景覆盖的动态输入路径保持为解释阶段。
+
+已验证 `lessons:build`、`lessons:verify`、`lessons:verify-upstream`、静态 UI 构建、单元测试和课程页面端到端测试。相同 `codeStageId` 的高亮源码在课程页共享传输，每阶段单独带焦点与差异注解。K1 评审后再按 §6 决定是否批量制作 K2–K7 课程。

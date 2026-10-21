@@ -23,7 +23,7 @@ export default async function LessonPage({ params }: { params: Promise<{ lessonI
   const lesson = build?.lessons.find(item => item.id === lessonId)
   if (!build || !lesson) return <main className="centered"><p>课程尚未构建，请运行 <code>pnpm build</code>。</p></main>
 
-  const views = await lessonStageViews(lesson, [...build.stages, ...build.upstreamStages ?? []])
+  const { views, sourceFiles } = await lessonStageViews(lesson, [...build.stages, ...build.upstreamStages ?? []])
   const { intro, byStage } = mdxSections(lesson.mdx, lesson)
   const sections: Record<string, ReactNode> = {}
   for (const [stageId, source] of Object.entries(byStage)) sections[stageId] = await renderMdx(source)
@@ -31,7 +31,7 @@ export default async function LessonPage({ params }: { params: Promise<{ lessonI
 
   return (
     <Suspense>
-      <LessonView lesson={lessonData} views={views} intro={await renderMdx(intro)} sections={sections} />
+      <LessonView lesson={lessonData} views={views} sourceFiles={sourceFiles} intro={await renderMdx(intro)} sections={sections} />
     </Suspense>
   )
 }

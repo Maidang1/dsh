@@ -1,10 +1,10 @@
 # 第三方声明
 
-本仓库没有复制上游源码文件；以下内容说明哪些代码来自或依据第三方项目，以及它们的许可证。
+以下内容说明哪些代码来自或依据第三方项目，以及它们的许可证。内核课程构建时从固定 commit 检出读取上游原文并写入被忽略的 `dist/` 产物；源码不会作为副本提交到仓库。
 
 ## deepseek-ai/deepseek-harness
 
-学习对象：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)，固定 commit `687f282e8625c6b8d11ff58211a90524be2e4317`（见 `upstream-lock.json`）。本仓库不复制其源码文件：对话内核以 npm 发布的 `@deepseek-ai/dsh-*` 包原样执行（见下节），课程内容引用上游源码时只给出链接、行号与内容哈希。prompt-contributor、tool-guard、calculator 与 llm-scripted 是本项目编写的教学插件，没有对应的上游文件；它们与上游的差异写在课程清单的 `simplifications` 与 `upstream-map.ts` 中。上游仓库及以下 `@deepseek-ai/dsh-*` 包使用同一份许可证：
+学习对象：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)，固定 commit `687f282e8625c6b8d11ff58211a90524be2e4317`（见 `upstream-lock.json`）。对话内核以 npm 发布的 `@deepseek-ai/dsh-*` 包原样执行（见下节）；内核课程从该 commit 的检出读取所展示的 TypeScript 源码，并在上游对照面板提供文件、行号与 commit 链接。展示源码与执行的 npm 发布包按固定版本绑定，不声称源码与编译产物逐字节对应。prompt-contributor、tool-guard、calculator 与 llm-scripted 是本项目编写的教学插件，没有对应的上游文件；它们与上游的差异写在课程清单的 `simplifications` 与 `upstream-map.ts` 中。上游仓库及以下 `@deepseek-ai/dsh-*` 包使用同一份许可证：
 
 ```text
 MIT License

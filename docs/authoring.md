@@ -46,3 +46,13 @@ pnpm lessons:build && pnpm lessons:verify
 - [ ] 每个阶段的 `simplifications` 至少一条（构建检查），写明与上游的差异，没有“模型必然更聪明”一类不可验证的描述。
 - [ ] 上游引用通过 `lessons:verify-upstream`，`supportLevel` 与实际验证等级一致。
 - [ ] 内容质量符合 [03 §10](03-code-hike-and-plugin-lessons.md#10-内容质量准则)。
+
+## 4 上游导读课程
+
+内核课程可以直接展示 `upstream-lock.json` 固定 commit 中的上游 TypeScript 原文，并运行同一发布版本的 npm 包。构建会校验包名、版本、引用片段哈希与展示文件；它不会证明上游源码与发布包的编译产物逐字节对应。课程需要明确写出这一区别。
+
+在 `upstream-map.ts` 中记录固定 commit 的路径、行号和哈希。用 `pnpm lessons:ref <id> <path> <startLine> <endLine> [symbol]` 生成引用内容；如需离线构建，将 `UPSTREAM_DIR` 设为该 commit 的本地检出。未设置时工具使用 `.cache/upstream` 并在首次运行时克隆仓库。
+
+上游阶段以 npm 阶段 ID 作为 `codeStageId`，并用 `focusAnchors` 按导读顺序聚焦映射中的引用 ID。构建仅展示入口 `src/index.ts` 与被引用的其他文件，不把检出源码提交到仓库。阶段的 `simplifications` 用作“运行环境说明”，应注明确定性模型、隔离目录或虚拟时间等与真实运行环境的差异；未被场景执行的路径写成解释阶段。
+
+上游导读的完整设计与首批内核插件顺序见 [内核插件课程方案](07-kernel-plugin-lessons.md)。

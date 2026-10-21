@@ -1,0 +1,13 @@
+{
+  "id": "system-prompt-scope",
+  "title": "根作用域与嵌套作用域的同名片段覆盖",
+  "modelScriptId": "greeting",
+  "memoryFiles": {},
+  "adapterModes": ["deterministic"],
+  "steps": [
+    { "kind": "mount", "id": "mount-root-contributor", "instanceId": "prompt-contributor" },
+    { "kind": "mount", "id": "mount-scoped-contributor", "instanceId": "scoped-contributor" },
+    { "kind": "input", "id": "root-session", "sessionId": "s-root", "text": "你好" },
+    { "kind": "input", "id": "scoped-session", "sessionId": "s-b", "text": "你好" }
+  ]
+}

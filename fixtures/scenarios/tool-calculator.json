@@ -1,0 +1,10 @@
+{
+  "id": "tool-calculator",
+  "title": "一次计算器工具调用",
+  "modelScriptId": "calculator",
+  "memoryFiles": {},
+  "adapterModes": ["deterministic"],
+  "steps": [
+    { "kind": "input", "id": "calculate", "sessionId": "s-calculator", "text": "1+2" }
+  ]
+}

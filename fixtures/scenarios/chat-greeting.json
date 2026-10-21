@@ -1,0 +1,10 @@
+{
+  "id": "chat-greeting",
+  "title": "一次普通文本对话",
+  "modelScriptId": "greeting",
+  "memoryFiles": {},
+  "adapterModes": ["deterministic"],
+  "steps": [
+    { "kind": "input", "id": "greeting", "sessionId": "s-greeting", "text": "你好" }
+  ]
+}

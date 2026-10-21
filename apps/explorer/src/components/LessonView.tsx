@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { ArchitectureNode, BuiltLesson } from '@harness-explorer/lesson-kit/schema'
 import type { Composition, ModelRequestPayload, SourceRef } from '@harness-explorer/contracts'
-import type { LessonStageView } from '@/lib/lesson-data'
+import type { LessonSourceFileView, LessonStageView } from '@/lib/lesson-data'
 import { phaseHistory, useReplay } from '@/lib/replay'
 import { assignLayers, LAYER_META } from '@/lib/dataflow'
 import { PHASE_LABEL, phaseOf } from '@/lib/phase'
@@ -61,6 +61,7 @@ const SUPPORT_LABEL: Record<BuiltLesson['supportLevel'], string> = {
 interface Props {
   lesson: Omit<BuiltLesson, 'mdx'>
   views: LessonStageView[]
+  sourceFiles: Record<string, LessonSourceFileView[]>
   intro: ReactNode
   sections: Record<string, ReactNode>
 }
@@ -149,7 +150,7 @@ function SystemText({ system, contributions }: { system: string; contributions: 
   return <>{parts}</>
 }
 
-export function LessonView({ lesson, views, intro, sections }: Props) {
+export function LessonView({ lesson, views, sourceFiles, intro, sections }: Props) {
   const state = useExplorer()
   const [index, setIndex] = useState(0)
   const [fileKey, setFileKey] = useState('entry')
@@ -204,6 +205,8 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
   const view = views[index]!
   const stage = view.stage
   const file = view.files.find(item => item.key === fileKey) ?? view.files[0]!
+  const sourceFile = sourceFiles[stage.codeStageId]!.find(item => item.key === file.key)!
+  const code = { ...sourceFile.code, annotations: [...sourceFile.code.annotations, ...file.annotations] }
   // Diff numbers live on the lesson stage that introduced this codeStageId; explanation
   // stages reuse them so the chip never says +0 −0 for code the previous stage introduced.
   const introducedAt = views.findIndex(item => item.stage.codeStageId === stage.codeStageId)
@@ -502,7 +505,7 @@ export function LessonView({ lesson, views, intro, sections }: Props) {
               </span>
             ) : null}
           </div>
-          <LessonCode key={file.key} code={file.code} />
+          <LessonCode key={file.key} code={code} />
           <div className="lesson__code-foot">
             <span className="code-legend"><i className="code-legend__added" aria-hidden />新增</span>
             <span className="code-legend"><i className="code-legend__modified" aria-hidden />修改</span>

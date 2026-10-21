@@ -1,0 +1,11 @@
+{
+  "id": "chat-cancel",
+  "title": "请求准备后取消",
+  "modelScriptId": "greeting",
+  "memoryFiles": {},
+  "adapterModes": ["deterministic"],
+  "steps": [
+    { "kind": "cancel", "id": "cancel-next-request", "afterCheckpoint": "request/context" },
+    { "kind": "input", "id": "cancelled-greeting", "sessionId": "s-cancelled", "text": "你好" }
+  ]
+}

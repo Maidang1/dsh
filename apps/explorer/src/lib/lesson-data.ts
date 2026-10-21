@@ -1,8 +1,8 @@
 import 'server-only'
 /**
  * Build-time lesson data: reads lessons.json from `pnpm lessons:build`,
- * highlights every stage file with Code Hike once, and marks focus anchors and
- * lines added since the previous lesson stage. Nothing here runs in the browser.
+ * highlights each code-stage file once and keeps stage-specific focus/diff
+ * annotations separate. Nothing here runs in the browser.
  */
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -21,12 +21,18 @@ export function readLessonBuild(): LessonBuild | null {
 }
 
 export interface StageFileView {
+  key: string
+  path: string
+  added: number
+  removed: number
+  annotations: HighlightedCode['annotations']
+}
+
+export interface LessonSourceFileView {
   /** Stable across stages so the code panel animates instead of remounting. */
   key: string
   path: string
   code: HighlightedCode
-  added: number
-  removed: number
 }
 
 export interface LessonStageView {
@@ -37,6 +43,11 @@ export interface LessonStageView {
   origin: 'teaching' | 'upstream'
   /** The npm package an upstream stage runs. */
   package?: { name: string; version: string }
+}
+
+export interface LessonViews {
+  views: LessonStageView[]
+  sourceFiles: Record<string, LessonSourceFileView[]>
 }
 
 /** Lines of `after` that are new compared with `before` (1-based), by LCS. */
@@ -69,13 +80,26 @@ function ranges(lines: number[]) {
   return result
 }
 
-export async function lessonStageViews(lesson: BuiltLesson, stages: readonly BuiltStage[]): Promise<LessonStageView[]> {
+export async function lessonStageViews(lesson: BuiltLesson, stages: readonly BuiltStage[]): Promise<LessonViews> {
   const byId = new Map(stages.map(stage => [stage.definition.id, stage]))
   const views: LessonStageView[] = []
+  const sourceFiles: Record<string, LessonSourceFileView[]> = {}
   let lastCode: BuiltStage | undefined
   let beforeLast: BuiltStage | undefined
   for (const stage of lesson.stages) {
     const code = byId.get(stage.codeStageId)!
+    let highlightedFiles = sourceFiles[stage.codeStageId]
+    if (!highlightedFiles) {
+      highlightedFiles = []
+      for (const file of code.files) {
+        highlightedFiles.push({
+          key: highlightedFiles.length === 0 ? 'entry' : file.path,
+          path: file.path,
+          code: await highlight({ value: file.content, lang: 'ts', meta: '' }, CODE_THEME),
+        })
+      }
+      sourceFiles[stage.codeStageId] = highlightedFiles
+    }
     // Explanation stages re-show an earlier code stage; their diff baseline is the code
     // stage that preceded it, so the added-line marks carry over (docs/design §3.3).
     const baseline = code === lastCode ? beforeLast : lastCode
@@ -84,19 +108,25 @@ export async function lessonStageViews(lesson: BuiltLesson, stages: readonly Bui
       // The entry file changes path between stages; compare it with the previous entry.
       const before = index === 0 ? baseline?.files[0] : baseline?.files.find(item => item.path === file.path)
       const diff = before && before !== file ? addedLines(before.content, file.content) : { added: [], removed: 0 }
-      const highlighted = await highlight({ value: file.content, lang: 'ts', meta: '' }, CODE_THEME)
+      const annotations: HighlightedCode['annotations'] = []
       for (const ref of code.sourceRefs.filter(item => item.path === file.path && stage.focusAnchors.includes(item.symbol ?? ''))) {
-        highlighted.annotations.push({ name: 'focus', query: ref.symbol ?? '', fromLineNumber: ref.startLine, toLineNumber: ref.endLine })
+        annotations.push({ name: 'focus', query: ref.symbol ?? '', fromLineNumber: ref.startLine, toLineNumber: ref.endLine })
       }
       for (const [from, to] of ranges(diff.added)) {
-        highlighted.annotations.push({ name: 'mark', query: 'added', fromLineNumber: from, toLineNumber: to })
+        annotations.push({ name: 'mark', query: 'added', fromLineNumber: from, toLineNumber: to })
       }
-      files.push({ key: index === 0 ? 'entry' : file.path, path: file.path, code: highlighted, added: diff.added.length, removed: diff.removed })
+      files.push({
+        key: highlightedFiles[index]!.key,
+        path: file.path,
+        added: diff.added.length,
+        removed: diff.removed,
+        annotations,
+      })
     }
     views.push({ stage, files, sourceRefs: code.sourceRefs, origin: code.definition.origin, package: code.definition.package })
     if (code !== lastCode) { beforeLast = lastCode; lastCode = code }
   }
-  return views
+  return { views, sourceFiles }
 }
 
 /** Split lesson MDX by `## NN` headings; each section belongs to the stage whose id starts with NN. */

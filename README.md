@@ -34,6 +34,7 @@ pnpm explorer     # 启动本地服务，终端打印带一次性令牌的链接
 |---|---|---|
 | prompt-contributor | 依赖声明、提示词片段注册、effect 自动清理、作用域覆盖 | contract-verified |
 | tool-guard | `tools/pre-execute` 的 around 中间件：委托、洋葱顺序、短路拒绝 | contract-verified |
+| system-prompt | 配置、作用域片段、动态输入、组装与渲染（上游原文导读） | contract-verified |
 
 ## 开发命令
 
@@ -78,4 +79,4 @@ docs                   设计文档、契约与技术决定
 
 ## 来源与许可
 
-学习对象：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)（MIT）。内核插件 `@deepseek-ai/dsh-*@0.2.1-rc.2` 与框架包 `@deepseek-ai/cordis`、`@deepseek-ai/cosmokit`、`@deepseek-ai/schemastery` 均以 MIT 许可从 npm 原样引入。prompt-contributor、tool-guard、calculator 与 llm-scripted 是本项目编写的教学插件；课程中的上游片段以链接和行号引用，不复制源码。许可证原文与依赖说明见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+学习对象：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)（MIT）。内核插件 `@deepseek-ai/dsh-*@0.2.1-rc.2` 与框架包 `@deepseek-ai/cordis`、`@deepseek-ai/cosmokit`、`@deepseek-ai/schemastery` 均以 MIT 许可从 npm 原样引入。prompt-contributor、tool-guard、calculator 与 llm-scripted 是本项目编写的教学插件；内核课程在构建时从固定 commit 的检出读取上游原文展示，仓库不保存这些源码副本。许可证原文与依赖说明见 [第三方声明](THIRD_PARTY_NOTICES.md)。

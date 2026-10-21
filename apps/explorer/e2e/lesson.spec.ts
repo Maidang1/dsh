@@ -66,6 +66,29 @@ test('shows upstream excerpts pinned to the baseline commit', async () => {
   await expect(link).toHaveAttribute('href', /687f282e8625c6b8d11ff58211a90524be2e4317\/packages\/core\/system-prompt\/src\/index\.ts#L478-L487/)
 })
 
+test('opens the upstream system-prompt lesson, switches focus and runs its published package', async () => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '列表', exact: true }).click()
+  await page.getByRole('list', { name: '插件列表' }).getByRole('button', { name: /^system-prompt/ }).click()
+  await page.getByRole('link', { name: '进入插件实现' }).click()
+  await expect(page.getByRole('heading', { name: '系统提示词：模型先读的说明' })).toBeVisible()
+  await page.getByRole('button', { name: /^00 程序和默认说明/ }).click()
+  await expect(page.locator('.stage-card__body')).toContainText('专门管理系统提示词的程序')
+  await page.getByText('课程简介', { exact: true }).click()
+  await expect(page.locator('.stage-card__body')).toContainText('系统提示词中的一小段文字')
+  await expect(page.getByText(/上游原文 · commit 687f282e · 运行发布包 @deepseek-ai\/dsh-system-prompt@0\.2\.1-rc\.2/)).toBeVisible()
+
+  await page.getByRole('button', { name: /^02 不同会话看到不同说明/ }).click()
+  await expect(page.locator('.lesson-code')).toContainText('class PromptLayer')
+  await expect(page.locator('.lesson-code [data-focus="true"]').first()).toBeVisible()
+  await page.getByRole('button', { name: /^00 程序和默认说明/ }).click()
+  await page.getByRole('button', { name: '运行此阶段' }).click()
+  await page.getByRole('tab', { name: '状态与数据' }).click()
+  await expect(page.locator('.stage-state__requests')).toContainText('You are an AI agent powered by DeepSeek Harness.')
+  await expect(page.locator('.stage-state__requests')).toContainText('你是一个助手')
+  await page.goto('/plugin/prompt-contributor')
+})
+
 test('locates a module\'s code from the architecture and marks later relations', async () => {
   await page.getByRole('button', { name: /^02 注册提示词片段/ }).click()
   await page.getByRole('tab', { name: '内部架构' }).click()
