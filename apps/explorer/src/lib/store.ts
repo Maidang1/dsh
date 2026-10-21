@@ -82,6 +82,8 @@ interface ExplorerState {
   /** Save reading position or a stage completion; applied locally at once. */
   updateLessonProgress(lessonId: string, update: LessonProgressUpdate): Promise<void>
   refreshRuns(): Promise<void>
+  /** Refetch the catalog after npm packages are installed or removed. */
+  refreshCatalog(): Promise<void>
   deleteRun(runId: string): Promise<void>
   pinRun(runId: string, pinned: boolean): Promise<void>
   /** Import an exported run; it is stored as data and selected, never executed. */
@@ -350,6 +352,14 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     async refreshRuns() {
       const [runs, storage] = await Promise.all([api.runs(), api.storage().catch(() => null)])
       set({ runs, storage })
+    },
+
+    async refreshCatalog() {
+      try {
+        set({ catalog: await api.catalog() })
+      } catch (error) {
+        set({ error: describeFailure('load', error) })
+      }
     },
 
     async deleteRun(runId) {

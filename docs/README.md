@@ -2,7 +2,7 @@
 
 本方案将产品交互、精简运行时、源码教学内容和行为验证拆成可独立交付的阶段。执行顺序是先证明核心机制正确，再接入可视化和 Code Hike，最后扩展插件覆盖。
 
-文档日期：2026-10-18。最新设计：本地 Node 启动，保留原有数据流与可视化，以实际执行数据驱动展示；持久化、运行隔离、混合组合与场景模型已按 Node 架构统一。状态：第一版已实现。阶段 0 的复用决定见 [decisions/0001](decisions/0001-upstream-baseline-and-reuse.md)，契约及其测试见 [contracts](contracts/README.md)，新课程的制作流程见 [authoring](authoring.md)；依赖版本由 `pnpm-lock.yaml` 锁定。
+文档日期：2026-10-18。最新设计：本地 Node 启动，保留原有数据流与可视化，以实际执行数据驱动展示；持久化、运行隔离、混合组合与场景模型已按 Node 架构统一。状态：第一版已实现。阶段 0 的复用决定见 [decisions/0001](decisions/0001-upstream-baseline-and-reuse.md)，内核改为直接运行上游发布包见 [decisions/0002](decisions/0002-run-upstream-packages.md)，契约及其测试见 [contracts](contracts/README.md)，新课程的制作流程见 [authoring](authoring.md)；依赖版本由 `pnpm-lock.yaml` 锁定。
 
 ## 已确定的产品约束
 
@@ -18,7 +18,7 @@
 
 | 决策 | 本版方案 |
 |---|---|
-| 执行模型 | 混合组合：被讲解的插件使用分阶段教学实现；基础插件在 P0-04 验证可行时复用固定 commit 的上游实现并通过观测适配记录，否则使用经契约验证的教学子集 |
+| 执行模型 | 混合组合：对话内核直接执行 npm 发布的 `@deepseek-ai/dsh-*@0.2.1-rc.2`（固定 commit 的发布，decisions/0002）并通过观测适配记录；被讲解的插件使用分阶段教学实现 |
 | 前端 | Next.js（静态导出）、React、TypeScript、MDX、Code Hike；版本与托管方式在阶段 0 验证后锁定 |
 | 图展示 | React Flow；初始树形布局保持稳定，复杂关系按需使用 ELK |
 | 状态管理 | Node 端 XState 只控制一次运行的校验、启动、停止与结算，同一时间只运行一次；每个实例独立记录运行状态；草稿与版本由 Node 实验仓库管理；Zustand 保存视图选择与回放游标 |

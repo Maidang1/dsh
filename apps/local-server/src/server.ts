@@ -14,6 +14,7 @@ import type { Catalog } from './catalog.ts'
 import { ControlError } from './controller.ts'
 import type { ControllerEvent, RunController } from './controller.ts'
 import { captureEnvironment } from './environment.ts'
+import type { PackageManager } from './packages.ts'
 import { commitDraft } from './experiments.ts'
 import { ConflictError, Draft, InvalidBundleError, LessonProgressUpdate, NotFoundError } from './store.ts'
 import type { RetentionPolicy } from './store.ts'
@@ -31,6 +32,10 @@ export interface ServerOptions {
   env?: NodeJS.ProcessEnv
   /** Fixed launch token for automated browser tests; random when omitted. */
   launchToken?: string
+  /** npm package installation; the /api/packages routes 404 without it. */
+  packages?: PackageManager
+  /** Why installs are off (store outside the repo); the install routes answer 409 with it. */
+  packagesDisabled?: string
 }
 
 export interface RunningServer {
@@ -53,6 +58,7 @@ class HttpError extends Error {
 const RunBody = z.object({ revisionId: z.string().min(1), adapterMode: AdapterMode })
 const PinBody = z.object({ pinned: z.boolean() })
 const DraftBody = z.object({ expectedVersion: z.number().int().nonnegative().nullable(), draft: Draft.omit({ version: true }) })
+const PackageBody = z.object({ name: z.string().min(1) })
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -113,7 +119,7 @@ function publicCatalog(catalog: Catalog) {
 }
 
 export function startServer(options: ServerOptions): Promise<RunningServer> {
-  const { store, catalog, controller } = options
+  const { store, catalog, controller, packages } = options
   let launchToken: string | null = options.launchToken ?? randomBytes(24).toString('base64url')
   const sessions = new Set<string>()
   let origins: string[] = []
@@ -292,6 +298,25 @@ export function startServer(options: ServerOptions): Promise<RunningServer> {
         return sendJson(response, 201, await store.importRun(await readBody(request, MAX_IMPORT_BODY)))
       case 'GET /payloads/:id':
         return sendJson(response, 200, await store.getPayload(parts[1]!))
+      case 'GET /packages':
+        return sendJson(response, 200, packages?.list() ?? [])
+      case 'GET /packages/:id': {
+        if (!packages || parts[1] !== 'search') throw new HttpError(404, `no route ${method} ${url.pathname}`)
+        return sendJson(response, 200, { results: await packages.search(url.searchParams.get('q') ?? '') })
+      }
+      case 'POST /packages': {
+        if (options.packagesDisabled) throw new HttpError(409, options.packagesDisabled)
+        if (!packages) throw new HttpError(404, `no route ${method} ${url.pathname}`)
+        const { name } = PackageBody.parse(await readBody(request))
+        const { module: _module, ...stage } = await packages.install(name)
+        return sendJson(response, 201, stage)
+      }
+      case 'DELETE /packages/:id': {
+        if (options.packagesDisabled) throw new HttpError(409, options.packagesDisabled)
+        if (!packages) throw new HttpError(404, `no route ${method} ${url.pathname}`)
+        await packages.uninstall(parts[1]!)
+        return sendJson(response, 200, { removed: parts[1] })
+      }
       case 'GET /events':
         return events(request, response, url)
       default:

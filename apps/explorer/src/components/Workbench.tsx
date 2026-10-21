@@ -8,7 +8,7 @@ import { PluginList, PluginTree } from './PluginTree'
 import { Inspector, PluginLibrary, PresetPicker, ReplayPosition, RunBar, ScopeEditor, Timeline, outcomeText } from './Panels'
 import { RequestDiff } from './RequestDiff'
 import { NarrowTabs, narrowPane } from './NarrowTabs'
-import { affectedConsumers, instancesFor, planAddition, scopeRemovalProblem } from '@/lib/library'
+import { affectedConsumers, instancesFor, planAddition, scopeRemovalProblem, scopeSessionProblem } from '@/lib/library'
 
 type BottomTab = 'timeline' | 'diff'
 
@@ -181,6 +181,24 @@ export function Workbench() {
             }))
             return useExplorer.getState().draft?.composition.scopes.some(scope => scope.id === id) ?? false
           }}
+          // Checked again on the draft the edit applies to: another tab may have listed the session meanwhile.
+          onAddSession={async (scopeId, sessionId) => {
+            await state.editDraft(current => (scopeSessionProblem(sessionId, current.composition.scopes, scopeId) ? current : {
+              ...current,
+              composition: {
+                ...current.composition,
+                scopes: current.composition.scopes.map(scope => (scope.id === scopeId ? { ...scope, sessions: [...(scope.sessions ?? []), sessionId] } : scope)),
+              },
+            }))
+            return useExplorer.getState().draft?.composition.scopes.some(scope => scope.id === scopeId && scope.sessions?.includes(sessionId)) ?? false
+          }}
+          onRemoveSession={(scopeId, sessionId) => void state.editDraft(current => ({
+            ...current,
+            composition: {
+              ...current.composition,
+              scopes: current.composition.scopes.map(scope => (scope.id === scopeId ? { ...scope, sessions: (scope.sessions ?? []).filter(item => item !== sessionId) } : scope)),
+            },
+          }))}
         />
       </div>
 

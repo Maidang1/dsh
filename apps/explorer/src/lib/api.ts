@@ -58,6 +58,22 @@ export interface LearningProgress {
   lessons: Record<string, { lastStageId: string | null; completed: Array<{ stageId: string; runId: string }> }>
 }
 
+export interface PackageSearchResult {
+  name: string
+  description: string
+  version: string
+  /** Whether the package has a release at the pinned upstream version; null when not checked. */
+  available: boolean | null
+  installed: boolean
+}
+
+export interface InstalledPackage {
+  name: string
+  version: string
+  definitionId: string
+  installedAt: string
+}
+
 export interface LessonProgressUpdate {
   lastStageId?: string
   completed?: { stageId: string; runId: string }
@@ -117,6 +133,10 @@ export const api = {
   pinRun: (runId: string, pinned: boolean) => request<{ pinned: boolean }>(`/api/runs/${encodeURIComponent(runId)}/pin`, { method: 'PUT', json: { pinned } }),
   importRun: (bundle: unknown) => request<RunManifest>('/api/imports', { method: 'POST', json: bundle }),
   cancelRun: (runId: string) => request<{ cancelling: string }>(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }),
+  searchPackages: (q: string) => request<{ results: PackageSearchResult[] }>(`/api/packages/search?q=${encodeURIComponent(q)}`),
+  packages: () => request<InstalledPackage[]>('/api/packages'),
+  installPackage: (name: string) => request<PublicStage>('/api/packages', { method: 'POST', json: { name } }),
+  uninstallPackage: (name: string) => request<{ removed: string }>(`/api/packages/${encodeURIComponent(name)}`, { method: 'DELETE' }),
 }
 
 export interface StreamHandlers {

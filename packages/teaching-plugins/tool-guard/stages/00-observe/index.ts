@@ -3,7 +3,7 @@
  * with next(), and sees the decision on the way back out.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type {} from '../../../tools/stages/main/index.ts'
+import type {} from '@deepseek-ai/dsh-tools'
 import { checkpoint } from '../../../shared/checkpoint.ts'
 
 export const name = 'tool-guard'

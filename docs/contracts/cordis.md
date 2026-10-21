@@ -21,7 +21,7 @@
 ### CTX-04 插件配置
 
 - 上游：`vendor/cordis/src/fiber.ts` 的 `resolveConfig`（apply 前按 `Config['~standard']` 校验）；`packages/core/system-prompt/src/index.ts:430` 的 `SystemPrompt.Config`。
-- 期望：带配置的阶段导出 schemastery `Config`，Cordis 在 apply 前校验，值类型不符时实例进入 failed（ValidationError）；配置中出现 schema 未列出的键（拼写错误、教学版不支持的上游选项、无配置阶段收到任何键）时，运行器在挂载任何实例前以 CompositionError 拒绝运行。课程构建把每个阶段 schema 的键记录为 `configKeys`，提交草稿时即按它拒绝不支持的键，不生成实验版本。
+- 期望：带配置的阶段导出 schemastery `Config`，Cordis 在 apply 前校验，值类型不符时实例进入 failed（ValidationError）；配置中出现 schema 未列出的键（拼写错误、阶段未声明的键、无配置阶段收到任何键）时，运行器在挂载任何实例前以 CompositionError 拒绝运行。课程构建把每个阶段 schema 的键记录为 `configKeys`，提交草稿时即按它拒绝不支持的键，不生成实验版本。
 - 验证：`packages/teaching-runtime/tests/config-contract.spec.ts`、`apps/local-server/tests/built-catalog.spec.ts`。状态：verified。
 
 ### LIFE-01 卸载贡献插件

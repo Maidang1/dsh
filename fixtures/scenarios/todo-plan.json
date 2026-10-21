@@ -1,0 +1,10 @@
+{
+  "id": "todo-plan",
+  "title": "npm 插件 dsh-tool-todo：模型调用 todo_write 记录任务列表",
+  "modelScriptId": "todo",
+  "memoryFiles": {},
+  "adapterModes": ["deterministic", "real"],
+  "steps": [
+    { "kind": "input", "id": "plan", "sessionId": "s", "text": "帮我规划：读代码、写测试" }
+  ]
+}

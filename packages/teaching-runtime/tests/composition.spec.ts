@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { CompositionError, validateComposition } from '../src/index.ts'
 import { lifecycleScenario, minimalChat } from './helpers.ts'
 
-const withScopes = (scopes: Array<{ id: string; parentId: string | null }>) => ({ ...minimalChat(), scopes })
+const withScopes = (scopes: Array<{ id: string; parentId: string | null; sessions?: string[] }>) => ({ ...minimalChat(), scopes })
 
 describe('scope tree', () => {
   it('accepts nested scopes', () => {
@@ -21,21 +21,43 @@ describe('scope tree', () => {
   })
 })
 
-describe('session scope chains', () => {
-  const withSessionScopes = (sessionScopes: Record<string, string[]>) => {
-    const composition = withScopes([{ id: 'root', parentId: null }, { id: 'a', parentId: 'root' }, { id: 'b', parentId: 'a' }])
-    composition.instances = composition.instances.map(instance => (instance.id === 'agent-loop' ? { ...instance, config: { sessionScopes } } : instance))
-    return composition
-  }
-
-  it('accepts chains that run from root down the scope tree', () => {
-    expect(() => validateComposition(withSessionScopes({ 's-b': ['root', 'a', 'b'], 's-a': ['root', 'a'] }), lifecycleScenario(), devStages)).not.toThrow()
+describe('scope sessions and instance placement', () => {
+  it('accepts sessions each listed by one scope', () => {
+    expect(() => validateComposition(withScopes([
+      { id: 'root', parentId: null },
+      { id: 'a', parentId: 'root', sessions: ['s-a'] },
+      { id: 'b', parentId: 'a', sessions: ['s-b'] },
+    ]), lifecycleScenario(), devStages)).not.toThrow()
   })
 
-  it.each([
-    ['a scope that does not exist', { 's-b': ['root', 'gone'] }, /maps session "s-b" to scope chain \[root, gone\], which is not a chain of this composition/],
-    ['a chain that skips a parent', { 's-b': ['root', 'b'] }, /expected \[root, a, b\]/],
-  ])('refuses %s instead of silently dropping layers', (_name, sessionScopes, message) => {
-    expect(() => validateComposition(withSessionScopes(sessionScopes), lifecycleScenario(), devStages)).toThrow(message)
+  it('refuses a session listed by two scopes', () => {
+    const composition = withScopes([
+      { id: 'root', parentId: null },
+      { id: 'a', parentId: 'root', sessions: ['s-b'] },
+      { id: 'b', parentId: 'a', sessions: ['s-b'] },
+    ])
+    expect(() => validateComposition(composition, lifecycleScenario(), devStages)).toThrow(CompositionError)
+    expect(() => validateComposition(composition, lifecycleScenario(), devStages)).toThrow('session "s-b" is listed by both scope "a" and scope "b"')
+  })
+
+  it('accepts an instance placed in a scope nested inside its parent instance\'s scope', () => {
+    const composition = withScopes([{ id: 'root', parentId: null }, { id: 'a', parentId: 'root' }, { id: 'b', parentId: 'a' }])
+    composition.instances = composition.instances.map(instance => {
+      if (instance.id === 'session') return { ...instance, scopeId: 'a' }
+      if (instance.id === 'tools') return { ...instance, scopeId: 'b', parentId: 'session' }
+      return instance
+    })
+    expect(() => validateComposition(composition, lifecycleScenario(), devStages)).not.toThrow()
+  })
+
+  it('refuses an instance in a scope outside its parent instance\'s scope', () => {
+    const composition = withScopes([{ id: 'root', parentId: null }, { id: 'a', parentId: 'root' }, { id: 'b', parentId: 'a' }])
+    composition.instances = composition.instances.map(instance => {
+      if (instance.id === 'session') return { ...instance, scopeId: 'b' }
+      if (instance.id === 'tools') return { ...instance, parentId: 'session' }
+      return instance
+    })
+    expect(() => validateComposition(composition, lifecycleScenario(), devStages)).toThrow(CompositionError)
+    expect(() => validateComposition(composition, lifecycleScenario(), devStages)).toThrow('instance "tools" is in scope "root", outside the scope "b" of its parent "session"')
   })
 })

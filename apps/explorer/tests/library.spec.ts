@@ -3,7 +3,7 @@ import { Composition } from '@harness-explorer/contracts'
 import { devStages } from '@harness-explorer/teaching-plugins'
 import { describe, expect, it } from 'vitest'
 import minimalChat from '../../../fixtures/compositions/minimal-chat.json' with { type: 'json' }
-import { affectedConsumers, instancesFor, parseConfig, planAddition, scopeIdProblem, scopeRemovalProblem } from '../src/lib/library'
+import { affectedConsumers, instancesFor, parseConfig, planAddition, scopeIdProblem, scopeRemovalProblem, scopeSessionProblem } from '../src/lib/library'
 import type { PublicStage } from '../src/lib/api'
 
 const stages: PublicStage[] = devStages.map(({ module: _module, ...stage }) => stage)
@@ -21,10 +21,10 @@ describe('plugin library', () => {
   it('lists each missing service with its provider and adds providers first, transitively', () => {
     const plan = planAddition(stages, [], stage('calculator@main'))
     expect(plan.providers.map(item => [item.service, item.stage.id])).toEqual([
-      ['tools', 'tools@main'],
-      ['systemPrompt', 'system-prompt@main'],
+      ['tools', 'tools@0.2.1-rc.2'],
+      ['systemPrompt', 'system-prompt@0.2.1-rc.2'],
     ])
-    expect(ids(plan)).toEqual(['system-prompt@main', 'tools@main', 'calculator@main'])
+    expect(ids(plan)).toEqual(['system-prompt@0.2.1-rc.2', 'tools@0.2.1-rc.2', 'calculator@main'])
     expect(plan.unresolved).toEqual([])
   })
 
@@ -52,7 +52,7 @@ describe('plugin library', () => {
   })
 
   it('does not list consumers another instance still serves', () => {
-    const second = instancesFor([stage('tools@main')], composition.instances)
+    const second = instancesFor([stage('tools@0.2.1-rc.2')], composition.instances)
     expect(affectedConsumers(stages, [...composition.instances, ...second], 'tools')).toEqual([])
   })
 
@@ -66,6 +66,21 @@ describe('plugin library', () => {
     expect(scopeIdProblem('Agent B', composition.scopes)).toMatch(/小写字母/)
   })
 
+  it('checks a session added to a scope', () => {
+    const scopes = [
+      { id: 'root', parentId: null },
+      { id: 'agent-b', parentId: 'root', sessions: ['s-b'] },
+      { id: 'agent-c', parentId: 'root' },
+    ]
+    expect(scopeSessionProblem('s-c', scopes, 'agent-c')).toBeNull()
+    expect(scopeSessionProblem('', scopes, 'agent-c')).toBe('会话 id 不能为空')
+    expect(scopeSessionProblem('  ', scopes, 'agent-c')).toBe('会话 id 不能为空')
+    expect(scopeSessionProblem('s c', scopes, 'agent-c')).toBe('会话 id 不能包含空白字符')
+    // validateComposition refuses a repeat within one scope too ("listed by both scope X and scope X").
+    expect(scopeSessionProblem('s-b', scopes, 'agent-b')).toBe('作用域 agent-b 已列出会话 s-b')
+    expect(scopeSessionProblem('s-b', scopes, 'agent-c')).toBe('会话 s-b 已由作用域 agent-b 列出')
+  })
+
   it('parses edited config and names unsupported keys before commit', () => {
     expect(parseConfig('{"text": "只用一句话"}', ['name', 'order', 'text'])).toEqual({ config: { text: '只用一句话' } })
     expect(parseConfig('{"txt": 1}', ['name', 'order', 'text'])).toEqual({ problem: '不支持的配置项：txt（支持：name、order、text）' })
@@ -77,10 +92,11 @@ describe('plugin library', () => {
 
   it('removes only a scope nothing uses', () => {
     const scopes = [...composition.scopes, { id: 'a', parentId: 'root' }, { id: 'b', parentId: 'a' }]
-    const loop = composition.instances.map(instance => (instance.id === 'agent-loop' ? { ...instance, config: { sessionScopes: { 's-b': ['root', 'b'] } } } : instance))
     expect(scopeRemovalProblem('root', { scopes, instances: composition.instances })).toBe('根作用域不能删除')
     expect(scopeRemovalProblem('a', { scopes, instances: composition.instances })).toBe('仍有子作用域：b')
-    expect(scopeRemovalProblem('b', { scopes, instances: loop })).toBe('仍被 sessionScopes 使用：agent-loop 的会话 s-b')
+    // A session listed in the scope's `sessions` keeps the scope in use (ScopeDefinition.sessions).
+    const withSession = scopes.map(scope => (scope.id === 'b' ? { ...scope, sessions: ['s-b'] } : scope))
+    expect(scopeRemovalProblem('b', { scopes: withSession, instances: composition.instances })).toBe('仍有会话：s-b')
     const moved = composition.instances.map(instance => (instance.id === 'prompt-contributor' ? { ...instance, scopeId: 'b' } : instance))
     expect(scopeRemovalProblem('b', { scopes, instances: moved })).toBe('仍有实例：prompt-contributor')
     expect(scopeRemovalProblem('b', { scopes, instances: composition.instances })).toBeNull()

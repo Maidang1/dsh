@@ -43,6 +43,8 @@ export type PluginInstance = z.infer<typeof PluginInstance>
 export const ScopeDefinition = z.object({
   id: Id,
   parentId: Id.nullable(),
+  /** Sessions whose agent lives in this scope; a session no scope lists lives in root. */
+  sessions: z.array(Id).optional(),
 })
 export type ScopeDefinition = z.infer<typeof ScopeDefinition>
 
@@ -72,6 +74,8 @@ export const ExecutableStageDefinition = z.object({
   /** Config keys the stage's Config schema names, recorded by the lesson build; absent for development stages. */
   configKeys: z.array(Id).optional(),
   upstreamCommit: Id.nullable(),
+  /** The npm package an upstream stage is loaded from, pinned to one exact version. */
+  package: z.object({ name: Id, version: Id }).optional(),
 }).refine(stage => stage.origin === 'teaching' || stage.upstreamCommit !== null, {
   message: 'upstream stages must pin an upstreamCommit',
 })
@@ -137,7 +141,7 @@ export const EnvironmentSnapshot = z.object({
 export type EnvironmentSnapshot = z.infer<typeof EnvironmentSnapshot>
 
 /** What a plugin definition is for; the plugin library filters by it (docs/01 §5.1). */
-export const PluginResponsibility = z.enum(['session', 'prompt', 'tool', 'event-policy', 'model', 'agent-loop'])
+export const PluginResponsibility = z.enum(['session', 'prompt', 'tool', 'event-policy', 'model', 'agent-loop', 'other'])
 export type PluginResponsibility = z.infer<typeof PluginResponsibility>
 
 export const AdapterMode = z.enum(['deterministic', 'real'])
