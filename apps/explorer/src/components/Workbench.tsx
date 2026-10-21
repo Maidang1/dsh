@@ -21,9 +21,9 @@ function StorageNote({ storage }: { storage: NonNullable<ReturnType<typeof useEx
   const limits = storage.retention
   const nearLimit = limits !== null && (storage.runs >= limits.maxRuns * 0.8 || storage.bytes >= limits.maxBytes * 0.8)
   return (
-    <span className={nearLimit ? 'warning-text' : 'muted'}>
+    <span className={nearLimit ? 'warning-text' : 'muted'} title={limits ? `上限 ${limits.maxRuns} 个 / ${megabytes(limits.maxBytes)}` : undefined}>
       运行记录 {storage.runs} 个 · {megabytes(storage.bytes)}
-      {limits ? `（上限 ${limits.maxRuns} 个 / ${megabytes(limits.maxBytes)}${nearLimit ? '，接近上限：结算后会自动删除最旧的未保留运行' : ''}）` : ''}
+      {limits && nearLimit ? `（接近上限 ${limits.maxRuns} 个 / ${megabytes(limits.maxBytes)}：结算后会自动删除最旧的未保留运行）` : ''}
     </span>
   )
 }
@@ -87,7 +87,7 @@ export function Workbench() {
         </div>
       ) : null}
 
-      <div className="workbench__subbar">
+      <div className="workbench__subbar" role="toolbar" aria-label="运行记录">
         <label>
           查看运行
           <select value={state.selectedRunId ?? ''} onChange={event => void state.selectRun(event.target.value || null)}>
@@ -96,13 +96,12 @@ export function Workbench() {
           </select>
         </label>
         {state.runtime?.runId && state.runtime.phase !== 'idle' && state.runtime.runId !== state.selectedRunId ? (
-          <button type="button" onClick={() => void state.selectRun(state.runtime!.runId)}>观看正在进行的运行 {state.runtime.runId}</button>
+          <button type="button" className="primary-quiet" onClick={() => void state.selectRun(state.runtime!.runId)}>观看正在进行的运行 {state.runtime.runId}</button>
         ) : null}
-        {selected ? <ReplayPosition revisionId={selected.revision?.id} seq={replay.seq} lastSeq={replay.lastSeq} atScenarioEnd={state.cursor === null} /> : null}
         {state.selectedRunId ? (
-          <>
-            <a className="button" href={`/api/runs/${encodeURIComponent(state.selectedRunId)}/export`} download>导出运行</a>
-            <label className="checkbox" title="保留的运行不会被自动清理">
+          <div className="toolbar-group">
+            <a className="button ghost" href={`/api/runs/${encodeURIComponent(state.selectedRunId)}/export`} download>导出运行</a>
+            <label className="checkbox ghost" title="保留的运行不会被自动清理">
               <input
                 type="checkbox"
                 checked={state.storage?.pinned.includes(state.selectedRunId) ?? false}
@@ -112,6 +111,7 @@ export function Workbench() {
             </label>
             <button
               type="button"
+              className="ghost ghost--danger"
               disabled={state.runtime?.phase !== 'idle'}
               onClick={() => {
                 if (window.confirm(`删除运行 ${state.selectedRunId}？删除后无法回放。`)) void state.deleteRun(state.selectedRunId!)
@@ -119,10 +119,11 @@ export function Workbench() {
             >
               删除运行
             </button>
-          </>
+          </div>
         ) : null}
+        <div className="toolbar-spacer" />
         {state.storage ? <StorageNote storage={state.storage} /> : null}
-        <label className="button">
+        <label className="button ghost">
           导入运行
           <input
             type="file"
@@ -135,61 +136,7 @@ export function Workbench() {
             }}
           />
         </label>
-        <div className="segmented" role="group" aria-label="图层">
-          {(['composition', 'dependency', 'data'] as const).map(layer => (
-            <button key={layer} type="button" aria-pressed={state.layer === layer} onClick={() => state.setLayer(layer)}>
-              {{ composition: '组合', dependency: '依赖', data: '运行数据' }[layer]}
-            </button>
-          ))}
-        </div>
-        <label className="checkbox">
-          <input type="checkbox" checked={state.listView} onChange={event => state.setListView(event.target.checked)} />
-          列表视图
-        </label>
-        <PluginLibrary
-          stages={catalog.stages}
-          responsibilities={catalog.responsibilities}
-          draft={draft}
-          onAdd={(selected, scopeId) => void updateInstances(instances => [...instances, ...instancesFor(selected, instances, scopeId)])}
-        />
-        <PresetPicker
-          presets={state.compositions}
-          scenarios={catalog.presetScenarios}
-          onLoad={async (id, scenarioId) => {
-            await state.editDraft(current => ({
-              ...current,
-              parentRevisionId: null,
-              composition: structuredClone(state.compositions[id]!),
-              ...scenarioId ? { scenarioId } : {},
-            }))
-            // Show the draft that was just replaced, not a run of the old composition.
-            state.selectInstance(null)
-            await state.selectRun(null)
-          }}
-        />
-        <ScopeEditor
-          composition={draft.composition}
-          // Checked again on the draft the edit applies to: an earlier queued edit may have started using the scope.
-          onRemove={id => void state.editDraft(current => (scopeRemovalProblem(id, current.composition) ? current : {
-            ...current,
-            composition: { ...current.composition, scopes: current.composition.scopes.filter(scope => scope.id !== id) },
-          }))}
-          onCreate={async (id, parentId) => {
-            await state.editDraft(current => ({
-              ...current,
-              composition: { ...current.composition, scopes: [...current.composition.scopes, { id, parentId }] },
-            }))
-            return useExplorer.getState().draft?.composition.scopes.some(scope => scope.id === id) ?? false
-          }}
-        />
       </div>
-
-      {source === 'run' ? (
-        <div className={`banner ${draftDiffers ? 'banner--warning' : ''}`}>
-          正在查看运行 {state.selectedRunId} 绑定的版本 {selected?.revision?.id}。
-          {draftDiffers ? ' 当前草稿与它不同，下一次运行会使用草稿。' : ''}
-        </div>
-      ) : null}
 
       <NarrowTabs<'tree' | 'inspector'>
         label="主区域"
@@ -199,11 +146,68 @@ export function Workbench() {
       />
       <div className="workbench__main">
         <section className={`workbench__tree${narrowPane(pane === 'tree')}`}>
+          <div className="canvas-bar" role="toolbar" aria-label="组合">
+            <div className="segmented" role="group" aria-label="图层">
+              {(['composition', 'dependency', 'data'] as const).map(layer => (
+                <button key={layer} type="button" aria-pressed={state.layer === layer} onClick={() => state.setLayer(layer)}>
+                  {{ composition: '组合', dependency: '依赖', data: '运行数据' }[layer]}
+                </button>
+              ))}
+            </div>
+            <label className="checkbox">
+              <input type="checkbox" checked={state.listView} onChange={event => state.setListView(event.target.checked)} />
+              列表视图
+            </label>
+            <div className="toolbar-spacer" />
+            <PluginLibrary
+              stages={catalog.stages}
+              responsibilities={catalog.responsibilities}
+              draft={draft}
+              onAdd={(selected, scopeId) => void updateInstances(instances => [...instances, ...instancesFor(selected, instances, scopeId)])}
+            />
+            <PresetPicker
+              presets={state.compositions}
+              scenarios={catalog.presetScenarios}
+              onLoad={async (id, scenarioId) => {
+                await state.editDraft(current => ({
+                  ...current,
+                  parentRevisionId: null,
+                  composition: structuredClone(state.compositions[id]!),
+                  ...scenarioId ? { scenarioId } : {},
+                }))
+                // Show the draft that was just replaced, not a run of the old composition.
+                state.selectInstance(null)
+                await state.selectRun(null)
+              }}
+            />
+            <ScopeEditor
+              composition={draft.composition}
+              // Checked again on the draft the edit applies to: an earlier queued edit may have started using the scope.
+              onRemove={id => void state.editDraft(current => (scopeRemovalProblem(id, current.composition) ? current : {
+                ...current,
+                composition: { ...current.composition, scopes: current.composition.scopes.filter(scope => scope.id !== id) },
+              }))}
+              onCreate={async (id, parentId) => {
+                await state.editDraft(current => ({
+                  ...current,
+                  composition: { ...current.composition, scopes: [...current.composition.scopes, { id, parentId }] },
+                }))
+                return useExplorer.getState().draft?.composition.scopes.some(scope => scope.id === id) ?? false
+              }}
+            />
+          </div>
+          {source === 'run' ? (
+            <div className={`canvas-note ${draftDiffers ? 'canvas-note--warning' : ''}`}>
+              正在查看运行 {state.selectedRunId} 绑定的版本 {selected?.revision?.id}。
+              {draftDiffers ? ' 当前草稿与它不同，下一次运行会使用草稿。' : ''}
+            </div>
+          ) : null}
           {state.listView
             ? <PluginList composition={composition} snapshot={replay.snapshot} selectedInstanceId={state.selectedInstanceId} onSelect={select} />
             : <PluginTree composition={composition} stages={catalog.stages} snapshot={replay.snapshot} layer={state.layer} selectedInstanceId={state.selectedInstanceId} onSelect={select} />}
         </section>
-        <div className={`workbench__inspector${narrowPane(pane === 'inspector')}`}>
+        {/* The pane scrolls on its own; focusable so the keyboard can scroll it when it holds no controls. */}
+        <div className={`workbench__inspector${narrowPane(pane === 'inspector')}`} tabIndex={0}>
           <Inspector
             instance={instance}
             stage={stage}
@@ -230,9 +234,12 @@ export function Workbench() {
       </div>
 
       <section className="workbench__bottom">
-        <div className="segmented" role="tablist" aria-label="底部面板">
-          <button type="button" role="tab" aria-selected={tab === 'timeline'} onClick={() => setTab('timeline')}>执行轨迹</button>
-          <button type="button" role="tab" aria-selected={tab === 'diff'} onClick={() => setTab('diff')}>请求对比</button>
+        <div className="panel-header">
+          <div className="panel-tabs" role="tablist" aria-label="底部面板">
+            <button type="button" role="tab" aria-selected={tab === 'timeline'} onClick={() => setTab('timeline')}>执行轨迹</button>
+            <button type="button" role="tab" aria-selected={tab === 'diff'} onClick={() => setTab('diff')}>请求对比</button>
+          </div>
+          {selected ? <ReplayPosition revisionId={selected.revision?.id} seq={replay.seq} lastSeq={replay.lastSeq} atScenarioEnd={state.cursor === null} /> : null}
         </div>
         {tab === 'timeline'
           ? <Timeline data={selected} seq={replay.seq} lastSeq={replay.lastSeq} onCursor={state.setCursor} lessons={state.lessons} onSelectInstance={select} />

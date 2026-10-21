@@ -4,8 +4,8 @@
  * separate layers with their own line style and text labels (docs/01 §3.1).
  * Node state comes from the replay projection, never from timers.
  */
-import { useMemo } from 'react'
-import { Background, Controls, Handle, Position, ReactFlow } from '@xyflow/react'
+import { useEffect, useMemo } from 'react'
+import { Background, Controls, Handle, Position, ReactFlow, useReactFlow, useStore } from '@xyflow/react'
 import type { Edge, Node, NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { Composition, PluginPhasePayload } from '@harness-explorer/contracts'
@@ -44,10 +44,21 @@ function ScopeNode({ data }: NodeProps<Node<{ label: string }>>) {
 
 const nodeTypes = { plugin: PluginNode, scope: ScopeNode }
 
+const FIT_OPTIONS = { padding: 0.12, maxZoom: 1.25 }
+
+/** `fitView` only runs once; fit again when the pane changes size, e.g. the window or a bar wrapping. */
+function FitOnResize() {
+  const { fitView } = useReactFlow()
+  const width = useStore(store => store.width)
+  const height = useStore(store => store.height)
+  useEffect(() => { if (width && height) void fitView(FIT_OPTIONS) }, [width, height, fitView])
+  return null
+}
+
 const COLUMNS = 4
-const NODE_W = 200
-const NODE_H = 110
-const GAP = 24
+const NODE_W = 184
+const NODE_H = 76
+const GAP = 20
 
 interface Props {
   composition: Composition
@@ -67,7 +78,7 @@ export function PluginTree({ composition, stages, snapshot, layer, selectedInsta
       const members = composition.instances.filter(instance => instance.scopeId === scope.id)
       const rows = Math.max(1, Math.ceil(members.length / COLUMNS))
       const width = Math.min(Math.max(members.length, 1), COLUMNS) * (NODE_W + GAP) + GAP
-      const height = rows * (NODE_H + GAP) + GAP + 24
+      const height = rows * (NODE_H + GAP) + GAP + 12
       nodes.push({ id: `scope:${scope.id}`, type: 'scope', position: { x: 0, y }, data: { label: scope.id }, style: { width, height }, selectable: false, className: 'scope-node' })
       members.forEach((instance, index) => {
         nodes.push({
@@ -75,7 +86,7 @@ export function PluginTree({ composition, stages, snapshot, layer, selectedInsta
           type: 'plugin',
           parentId: `scope:${scope.id}`,
           extent: 'parent',
-          position: { x: GAP + (index % COLUMNS) * (NODE_W + GAP), y: 36 + Math.floor(index / COLUMNS) * (NODE_H + GAP) },
+          position: { x: GAP + (index % COLUMNS) * (NODE_W + GAP), y: 32 + Math.floor(index / COLUMNS) * (NODE_H + GAP) },
           data: {
             instanceId: instance.id,
             stageId: instance.stageId,
@@ -139,12 +150,15 @@ export function PluginTree({ composition, stages, snapshot, layer, selectedInsta
         onPaneClick={() => onSelect(null)}
         nodesDraggable={false}
         fitView
+        // Small compositions should read at full size instead of being blown up to fill the pane.
+        fitViewOptions={FIT_OPTIONS}
         // The default 0.5 cannot fit a four-column scope on a phone-width screen.
         minZoom={0.25}
         proOptions={{ hideAttribution: true }}
       >
-        <Background gap={24} />
-        <Controls showInteractive={false} />
+        <Background gap={16} size={1} />
+        <Controls showInteractive={false} fitViewOptions={FIT_OPTIONS} />
+        <FitOnResize />
       </ReactFlow>
     </div>
   )

@@ -33,7 +33,7 @@ const OUTCOME_TEXT: Record<string, string> = {
 
 /**
  * Which run version and replay position the views show (docs/01 §10), kept in
- * the header so it stays visible whichever bottom tab is open.
+ * the bottom panel's tab bar so it stays visible whichever tab is open.
  */
 export function ReplayPosition({ revisionId, seq, lastSeq, atScenarioEnd }: { revisionId: string | undefined; seq: number; lastSeq: number; atScenarioEnd: boolean }) {
   return (
@@ -67,16 +67,13 @@ export function RunBar({ catalog, draft, runtime, connected, adapterMode, enviro
   const realAllowed = missing.length === 0 && scenario?.adapterModes.includes('real')
   return (
     <div className="run-bar" role="toolbar" aria-label="运行控制">
-      <label>
+      <label className="run-bar__scenario">
         场景
         <select value={draft.scenarioId} onChange={event => onScenario(event.target.value)}>
           {catalog.scenarios.map(scenario => <option key={scenario.id} value={scenario.id}>{scenario.title}</option>)}
         </select>
       </label>
-      <button type="button" className="primary" onClick={onRun} disabled={busy} title={busy ? '当前运行结束后才能再次运行' : undefined}>
-        运行教学代码
-      </button>
-      <label>
+      <label className="run-bar__model">
         模型
         <select value={adapterMode} onChange={event => onAdapterMode(event.target.value as AdapterMode)}>
           <option value="deterministic">确定性模型（无需 API Key）</option>
@@ -85,13 +82,18 @@ export function RunBar({ catalog, draft, runtime, connected, adapterMode, enviro
           </option>
         </select>
       </label>
-      <span className="badge">{adapterMode === 'real' ? '真实模型 · 结果不可严格复现 · 环境来自本机' : '确定性模型 · 可重复'}</span>
-      {busy ? <button type="button" onClick={onCancel}>停止运行</button> : null}
-      <span className="run-bar__phase" aria-live="polite">
+      {adapterMode === 'real' ? <span className="run-bar__mode warning-text">结果不可严格复现 · 环境来自本机</span> : null}
+      <span className={`status-chip status-chip--${runtime?.phase ?? 'idle'}`} aria-live="polite">
+        <span className="status-chip__dot" aria-hidden />
         控制器：{PHASE_TEXT[runtime?.phase ?? 'idle']}
         {runtime?.error ? ` · ${runtime.error.message}` : ''}
+        <span className="status-chip__sep" aria-hidden>·</span>
+        <span className={connected ? '' : 'muted'}>{connected ? '已连接' : '未订阅'}</span>
       </span>
-      <span className={`badge ${connected ? '' : 'badge--muted'}`}>{connected ? '已连接' : '未订阅'}</span>
+      {busy ? <button type="button" onClick={onCancel}>停止运行</button> : null}
+      <button type="button" className="primary run-bar__run" onClick={onRun} disabled={busy} title={busy ? '当前运行结束后才能再次运行' : undefined}>
+        运行教学代码
+      </button>
     </div>
   )
 }
@@ -174,7 +176,27 @@ function StateFix({ plugin, enabled, unavailable, editable, missingProviders, on
 }
 
 export function Inspector({ instance, stage, snapshot, lessons, editable, stagesOfDefinition, consumers, missingProviders, onAddProviders, onRemove, onStage, onEnabled, history, seq, onCursor, scopes, onScope, onConfig }: InspectorProps) {
-  if (!instance) return <aside className="inspector"><p className="muted">选择插件树中的一个实例查看状态与依赖。</p></aside>
+  if (!instance) {
+    return (
+      <aside className="inspector inspector--empty">
+        <p className="inspector__hint">选择插件树中的一个实例查看状态与依赖。</p>
+        <h3>节点状态</h3>
+        <ul className="phase-legend">
+          {(['active', 'pending', 'loading', 'failed', 'unloading', 'null', 'none'] as const).map(key => (
+            <li key={key} className={`phase-${key}`}>
+              <span className="plugin-node__phase"><span aria-hidden>{PHASE_LABEL[key]!.mark}</span> {PHASE_LABEL[key]!.text}</span>
+            </li>
+          ))}
+        </ul>
+        <h3>图层</h3>
+        <dl>
+          <dt>组合</dt><dd>父子插件关系</dd>
+          <dt>依赖</dt><dd>服务的声明与解析，虚线</dd>
+          <dt>运行数据</dt><dd>回放位置上的注册项流向</dd>
+        </dl>
+      </aside>
+    )
+  }
   const plugin = snapshot.plugins[instance.id]
   const phase = phaseOf(plugin, instance.enabled)
   const unavailable = (stage?.requires ?? []).filter(service => !snapshot.services[service]?.available)
@@ -309,7 +331,7 @@ export function PresetPicker({ presets, scenarios, onLoad }: {
   return (
     <div className="preset-picker" role="group" aria-label="从预设开始">
       <label>
-        预设组合
+        <span className="sr-only">预设组合</span>
         <select value={id} onChange={(event) => { setId(event.target.value); setConfirming(false) }}>
           {ids.map(item => <option key={item} value={item}>{item}（{presets[item]!.instances.length} 个实例）</option>)}
         </select>
@@ -343,43 +365,45 @@ export function ScopeEditor({ composition, onCreate, onRemove }: {
   return (
     <details className="scope-editor">
       <summary>作用域（{scopes.length}）</summary>
-      <ul>
-        {scopes.map((scope) => {
-          const problem = problems.get(scope.id)
-          return (
-            <li key={scope.id}>
-              {scope.id}{scope.parentId ? <span className="muted">（父：{scope.parentId}）</span> : <span className="muted">（根）</span>}
-              {problem
-                ? <span className="muted"> · 不能删除：{problem}</span>
-                : <> <button type="button" className="link-button" onClick={() => onRemove(scope.id)}>删除</button></>}
-            </li>
-          )
-        })}
-      </ul>
-      <p className="muted">作用域只决定提示词片段的分层：会话按 agent-loop 配置中的 sessionScopes 选择作用域链；服务在整个组合中解析。</p>
-      <label>
-        新作用域
-        <input value={id} onChange={event => setId(event.target.value.trim())} placeholder="例如 agent-b" />
-      </label>
-      <label>
-        父作用域
-        <select value={parent} onChange={event => setParentId(event.target.value)}>
-          {scopes.map(scope => <option key={scope.id} value={scope.id}>{scope.id}</option>)}
-        </select>
-      </label>
-      {problem ? <p className="error-text" role="status">{problem}</p> : null}
-      <button
-        type="button"
-        disabled={!id || problem !== null || saving}
-        onClick={async () => {
-          setSaving(true)
-          // Keep the name if the save did not take, e.g. the draft changed in another tab.
-          if (await onCreate(id, parent)) setId('')
-          setSaving(false)
-        }}
-      >
-        新建作用域
-      </button>
+      <div className="scope-editor__panel">
+        <ul>
+          {scopes.map((scope) => {
+            const problem = problems.get(scope.id)
+            return (
+              <li key={scope.id}>
+                {scope.id}{scope.parentId ? <span className="muted">（父：{scope.parentId}）</span> : <span className="muted">（根）</span>}
+                {problem
+                  ? <span className="muted"> · 不能删除：{problem}</span>
+                  : <> <button type="button" className="link-button" onClick={() => onRemove(scope.id)}>删除</button></>}
+              </li>
+            )
+          })}
+        </ul>
+        <p className="muted">作用域只决定提示词片段的分层：会话按 agent-loop 配置中的 sessionScopes 选择作用域链；服务在整个组合中解析。</p>
+        <label>
+          新作用域
+          <input value={id} onChange={event => setId(event.target.value.trim())} placeholder="例如 agent-b" />
+        </label>
+        <label>
+          父作用域
+          <select value={parent} onChange={event => setParentId(event.target.value)}>
+            {scopes.map(scope => <option key={scope.id} value={scope.id}>{scope.id}</option>)}
+          </select>
+        </label>
+        {problem ? <p className="error-text" role="status">{problem}</p> : null}
+        <button
+          type="button"
+          disabled={!id || problem !== null || saving}
+          onClick={async () => {
+            setSaving(true)
+            // Keep the name if the save did not take, e.g. the draft changed in another tab.
+            if (await onCreate(id, parent)) setId('')
+            setSaving(false)
+          }}
+        >
+          新建作用域
+        </button>
+      </div>
     </details>
   )
 }
@@ -554,18 +578,19 @@ export function Timeline({ data, seq, lastSeq, onCursor, lessons, onSelectInstan
   return (
     <section className="timeline" aria-label="执行轨迹">
       <div className="timeline__controls">
-        <button type="button" onClick={togglePlayback} aria-pressed={playing}>{playing ? '暂停回放' : '播放回放'}</button>
+        <div className="toolbar-group">
+          <button type="button" onClick={togglePlayback} aria-pressed={playing}>{playing ? '暂停回放' : '播放回放'}</button>
+          <button type="button" className="ghost" onClick={() => step(-1)} aria-label="上一条记录">上一步</button>
+          <button type="button" className="ghost" onClick={() => step(1)} aria-label="下一条记录">下一步</button>
+        </div>
         <label>
           速度
           <select value={speed} onChange={event => setSpeed(Number(event.target.value))}>
             {[1, 2, 4].map(value => <option key={value} value={value}>{value}×</option>)}
           </select>
         </label>
-        <button type="button" onClick={() => step(-1)} aria-label="上一条记录">上一步</button>
-        <button type="button" onClick={() => step(1)} aria-label="下一条记录">下一步</button>
-        <button type="button" onClick={() => onCursor(null)}>场景结束时</button>
-        <button type="button" onClick={() => onCursor(lastSeq)}>到最新（含结算）</button>
         <input
+          className="timeline__slider"
           type="range"
           min={-1}
           max={Math.max(lastSeq, -1)}
@@ -573,18 +598,24 @@ export function Timeline({ data, seq, lastSeq, onCursor, lessons, onSelectInstan
           onChange={event => onCursor(Number(event.target.value))}
           aria-label="回放位置"
         />
-        <span>回放位置 {seq} / {lastSeq}</span>
+        <span className="timeline__position">回放位置 {seq} / {lastSeq}</span>
+        <div className="toolbar-group">
+          <button type="button" className="ghost" onClick={() => onCursor(null)}>场景结束时</button>
+          <button type="button" className="ghost" onClick={() => onCursor(lastSeq)}>到最新（含结算）</button>
+        </div>
         <label>
           类型
           <select value={filter} onChange={event => setFilter(event.target.value as typeof filter)}>
             {KIND_FILTERS.map(kind => <option key={kind} value={kind}>{kind}</option>)}
           </select>
         </label>
-        <span className="muted">回放只移动游标，不会重新执行插件。</span>
       </div>
-      <CurrentRecord data={data} seq={seq} lessons={lessons} onSelectInstance={onSelectInstance} />
+      <div className="timeline__status">
+        <CurrentRecord data={data} seq={seq} lessons={lessons} onSelectInstance={onSelectInstance} />
+        {data.settled ? <p className="muted">运行结果：{outcomeText(data.settled.outcome)}，最后序号 {data.settled.finalSeq}</p> : <p className="muted">运行未结算，结果尚不完整。</p>}
+        <p className="muted timeline__note">回放只移动游标，不会重新执行插件。</p>
+      </div>
       {data.gaps.length ? <p className="warning-text">轨迹缺口：{data.gaps.map(gap => `${gap.fromSeq}–${gap.toSeq}`).join('，')}，结果不完整。</p> : null}
-      {data.settled ? <p className="muted">运行结果：{outcomeText(data.settled.outcome)}，最后序号 {data.settled.finalSeq}</p> : <p className="muted">运行未结算，结果尚不完整。</p>}
       {data.settled?.completeness === 'truncated' ? <p className="warning-text">轨迹不完整：达到采集上限、写盘失败或运行中断，缺失的尾部不能视为成功。</p> : null}
       <TimelineRows records={records} payloads={data.payloads} seq={seq} onCursor={onCursor} />
     </section>
