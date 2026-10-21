@@ -74,6 +74,7 @@ docs                   设计文档、契约与技术决定
 4. [分阶段实施计划与任务验收](docs/04-implementation-plan.md)
 5. [行为一致性验证与发布标准](docs/05-validation-and-release.md)
 6. [上游依据与待验证事项](docs/06-source-baseline.md)
+7. [内核插件课程方案](docs/07-kernel-plugin-lessons.md)
 
 ## 来源与许可
 
