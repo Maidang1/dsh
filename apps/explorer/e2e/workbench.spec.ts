@@ -89,13 +89,50 @@ test('lists the lifecycle history of an instance and jumps to a transition', asy
   await page.getByRole('button', { name: '图', exact: true }).click()
 })
 
+/** Playback leftovers from earlier serial tests must not leak into later ones. */
+async function pausePlayback(page: Page) {
+  const pause = page.getByRole('button', { name: '暂停回放' })
+  if (await pause.isVisible()) await pause.click()
+}
+
+/**
+ * Focus a canvas node and confirm focus landed before dispatching keys.
+ * xyflow hides each node (visibility: hidden) until it is measured; right after
+ * the list→graph remount there is a window where programmatic focus() is a
+ * silent no-op, and neither locator.focus() nor locator.press() verifies that
+ * focus actually moved. Retry until toBeFocused passes, then send the key.
+ */
+async function focusCanvasNode(page: Page, name: string) {
+  const node = page.locator('.plugin-node', { hasText: name })
+  await expect(async () => {
+    await node.focus()
+    await expect(node).toBeFocused()
+  }).toPass({ intervals: [20, 50, 100] })
+}
+
 test('selects a canvas node from the keyboard', async () => {
-  // The previous test left the graph view showing the completed run.
-  const node = page.locator('.plugin-node', { hasText: 'agent-loop' })
-  await node.focus()
+  // Independent of earlier tests' leftovers: graph view on, playback off.
+  await page.getByRole('button', { name: '图', exact: true }).click()
+  await pausePlayback(page)
+  await focusCanvasNode(page, 'agent-loop')
   await page.keyboard.press('Space')
   const summary = page.getByRole('complementary', { name: '实例摘要' })
   await expect(summary.getByRole('heading', { name: 'agent-loop' })).toBeVisible()
+})
+
+test('selects a canvas node from the keyboard while playback is running', async () => {
+  await page.getByRole('button', { name: '图', exact: true }).click()
+  await pausePlayback(page)
+  await page.getByRole('slider', { name: '回放位置' }).fill('0')
+  await page.getByLabel('速度').selectOption('4')
+  await page.getByRole('button', { name: '播放回放' }).click()
+  // The cursor moves every 100 ms at 4x and the tree rebuilds its nodes on each
+  // move; keyboard selection must still work.
+  await focusCanvasNode(page, 'prompt-contributor')
+  await page.keyboard.press('Space')
+  const summary = page.getByRole('complementary', { name: '实例摘要' })
+  await expect(summary.getByRole('heading', { name: 'prompt-contributor' })).toBeVisible()
+  await pausePlayback(page)
 })
 
 test('compares the request before and after the contributor is mounted', async () => {
