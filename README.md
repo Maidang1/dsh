@@ -16,6 +16,8 @@ pnpm build        # 构建课程（类型检查、打包阶段模块、生成 le
 pnpm explorer     # 启动本地服务，终端打印带一次性令牌的链接
 ```
 
+也可以用 `pnpm start` 一步完成构建与启动。
+
 用终端打印的链接打开浏览器。服务只绑定 `127.0.0.1`，令牌换取会话 cookie 后失效；运行记录保存在项目根目录的 `.explorer/`。界面的插件库可以从 npm 安装其他 `@deepseek-ai/dsh-*@0.2.1-rc.2` 附加包，安装进 `.explorer/packages/`。上游包读写的 `DSH_HOME` 被限定在 `.explorer/dsh-home/`，实验台不接触本机的 `~/.dsh`。
 
 真实模型模式需要在启动 `pnpm explorer` 的环境中设置 `DEEPSEEK_API_KEY`（可选 `DEEPSEEK_BASE_URL`）。密钥只在 Node 进程内使用，不进入浏览器、轨迹或导出文件。
@@ -40,6 +42,7 @@ pnpm explorer     # 启动本地服务，终端打印带一次性令牌的链接
 
 | 命令 | 作用 |
 |---|---|
+| `pnpm start` | 构建课程与界面后启动本地服务（`pnpm build && pnpm explorer`） |
 | `pnpm typecheck` | 全部包与界面的 TypeScript 检查 |
 | `pnpm test` | 契约、轨迹、运行宿主与内容构建测试（Vitest） |
 | `pnpm lesson:new <plugin-id>` | 生成新课程骨架（阶段源码、课程内容、组合与场景），制作流程见 [课程制作指南](docs/authoring.md) |

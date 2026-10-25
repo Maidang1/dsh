@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p apps/explorer/tsconfig.json",
     "test": "vitest run",
     "test:contracts": "vitest run packages/contracts packages/teaching-runtime",
+    "start": "pnpm build && pnpm explorer",
     "explorer": "tsx apps/local-server/src/main.ts",
     "lessons:build": "tsx scripts/build-lessons.ts",
     "lessons:verify": "tsx scripts/verify-lessons.ts",
