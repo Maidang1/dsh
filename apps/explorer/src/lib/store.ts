@@ -200,23 +200,32 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         const [catalog, compositions, runtime, runs] = await Promise.all([api.catalog(), api.compositions(), api.state(), api.runs()])
         const lessons = await api.lessons().catch(() => null)
         const environment = await api.environment().catch(() => null)
+        const freshDraft = (expectedVersion: number | null) => api.saveDraft({
+          id: DRAFT_ID,
+          parentRevisionId: null,
+          composition: compositions[DEFAULT_COMPOSITION] ?? Object.values(compositions)[0]!,
+          scenarioId: (catalog.scenarios.find(scenario => scenario.id === DEFAULT_SCENARIO) ?? catalog.scenarios[0]!).id,
+          seed: 1,
+        }, expectedVersion)
         let draft: Draft
+        let notice: string | null = null
         try {
           draft = await api.draft(DRAFT_ID)
         } catch (error) {
           if (!(error instanceof ApiError) || error.status !== 404) throw error
-          const composition = compositions[DEFAULT_COMPOSITION] ?? Object.values(compositions)[0]!
-          draft = await api.saveDraft({
-            id: DRAFT_ID,
-            parentRevisionId: null,
-            composition,
-            scenarioId: (catalog.scenarios.find(scenario => scenario.id === DEFAULT_SCENARIO) ?? catalog.scenarios[0]!).id,
-            seed: 1,
-          }, null)
+          draft = await freshDraft(null)
+        }
+        // A draft saved by an older content version can name stages or a scenario the catalog no
+        // longer has; it could never pass composition checks, so start again from the default preset.
+        const stageIds = new Set(catalog.stages.map(stage => stage.id))
+        const stale = draft.composition.instances.map(instance => instance.stageId).filter(id => !stageIds.has(id))
+        if (stale.length || !catalog.scenarios.some(scenario => scenario.id === draft.scenarioId)) {
+          draft = await freshDraft(draft.version)
+          notice = `草稿来自旧版本内容（${stale.length ? `未知阶段 ${stale.join('、')}` : '场景已不存在'}），已重置为默认组合。`
         }
         const storage = await api.storage().catch(() => null)
         const progress = await api.progress().catch(() => ({ lessons: {} }))
-        set({ ready: true, catalog, compositions, runtime, runs, draft, lessons, environment, storage, progress })
+        set({ ready: true, catalog, compositions, runtime, runs, draft, lessons, environment, storage, progress, error: notice })
         // Compare with what this stream saw last: the run stream also writes `runtime`, so the store may already hold `next`.
         let before: RuntimeState | null = runtime
         stopStateWatch ??= subscribeState((next) => {
