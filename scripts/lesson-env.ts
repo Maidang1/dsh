@@ -1,6 +1,7 @@
 /** Shared inputs of the lesson scripts: repository paths, fixtures and contracts. */
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { existsSync, readFileSync, readdirSync, renameSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Composition, ModelScript, Scenario } from '@harness-explorer/contracts'
@@ -34,7 +35,17 @@ export function ensureUpstream(): string {
   if (!dir) {
     dir = join(repoRoot, '.cache/upstream')
     if (!existsSync(dir)) {
-      execFileSync('git', ['clone', '--filter=blob:none', '--no-checkout', 'https://github.com/deepseek-ai/deepseek-harness', dir], { stdio: 'inherit' })
+      // Test workers call this concurrently: each clones and checks out aside, and
+      // the first rename wins, so no caller ever sees a half-made checkout.
+      const tmp = `${dir}.${randomUUID().slice(0, 8)}`
+      execFileSync('git', ['clone', '--filter=blob:none', '--no-checkout', 'https://github.com/deepseek-ai/deepseek-harness', tmp], { stdio: 'inherit' })
+      execFileSync('git', ['-C', tmp, 'checkout', '--quiet', upstreamCommit], { stdio: 'inherit' })
+      try {
+        renameSync(tmp, dir)
+      } catch (error) {
+        rmSync(tmp, { recursive: true, force: true })
+        if (!existsSync(dir)) throw error
+      }
     }
     const head = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
     if (head !== upstreamCommit) execFileSync('git', ['-C', dir, 'checkout', '--quiet', upstreamCommit], { stdio: 'inherit' })

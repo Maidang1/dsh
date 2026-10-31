@@ -40,7 +40,7 @@ describe('lesson build', () => {
   beforeAll(async () => {
     outDir = await mkdtemp(join(tmpdir(), 'lessons-'))
     build = await buildLessons({ ...await buildOptions(), outDir })
-  })
+  }, 120_000) // a cold cache clones upstream first
   afterAll(() => rm(outDir, { recursive: true, force: true }))
 
   const stage = (id: string) => build.stages.find(item => item.definition.id === id)!

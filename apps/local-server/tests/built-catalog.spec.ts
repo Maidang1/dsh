@@ -24,7 +24,7 @@ let lessons: LessonBuild
 beforeAll(async () => {
   storeDir = await mkdtemp(join(tmpdir(), 'explorer-built-'))
   lessons = await buildLessons({ ...await buildOptions(), outDir })
-})
+}, 120_000) // a cold cache clones upstream first
 afterAll(async () => {
   await rm(outDir, { recursive: true, force: true })
   await rm(storeDir, { recursive: true, force: true })
